@@ -16,7 +16,7 @@ class User(BaseModel):
 
 
 class RegisterSchema(BaseModel):
-    email: EmailStr
+    email: str
     password: str
     confirm_password: str
     role: UserRoles
