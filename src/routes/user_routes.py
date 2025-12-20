@@ -7,8 +7,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.config.db import get_db
 from src.schema.user_schema import RegisterSchema, UpdateUserSchema, LoginSchema
 from src.services.auth_services import register_user_service, get_user_by_email
+from src.utils.email_service import send_verification_email
 from src.utils.errors import UserErrors, AuthError
-from src.utils.utils import hash_password, verify_password, create_jwt_token
+from src.utils.utils import hash_password, verify_password, create_jwt_token, generate_email_verification_code
 
 user_router = APIRouter(tags=["User"])
 
@@ -16,12 +17,16 @@ user_router = APIRouter(tags=["User"])
 @user_router.post("/auth/register")
 async def register(data: RegisterSchema, db: AsyncSession = Depends(get_db)):
     try:
+
+        print("--------- data from frontend---------")
+        print(data)
         # check if the user already exists
         user_exists = await get_user_by_email(db, data.email)
 
         if user_exists:
             raise UserErrors.USER_ALREADY_EXISTS
 
+        # exclude confirm password
         user_data = data.model_dump(exclude={"confirm_password"})
 
         # hash password
@@ -30,8 +35,15 @@ async def register(data: RegisterSchema, db: AsyncSession = Depends(get_db)):
         # is verified
         user_data["is_verified"] = True
 
+        # token = generate_email_verification_code()
+
+        # email token send logic
+        # await send_verification_email(data.email, token)
+
         # register user
         user = await register_user_service(db, user_data)
+
+        print(user)
 
         return {
             "success": True,

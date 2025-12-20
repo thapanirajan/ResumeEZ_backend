@@ -6,6 +6,7 @@ ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60
 
 import bcrypt
+import secrets
 
 
 def hash_password(password: str) -> str:
@@ -23,3 +24,7 @@ def create_jwt_token(data: dict, expires_delta: timedelta):
     expire = datetime.now(UTC) + expires_delta
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+
+
+def generate_email_verification_code() -> str:
+    return f"{secrets.randbelow(1_000_000):06d}"

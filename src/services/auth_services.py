@@ -14,7 +14,7 @@ async def register_user_service(db: AsyncSession, user_data: dict):
     return user
 
 
-async def get_user_by_email(db: AsyncSession, email: EmailStr):
+async def get_user_by_email(db: AsyncSession, email: str):
     user = await db.execute(select(User).where(User.email == email))
     return user.scalar_one_or_none()
 
