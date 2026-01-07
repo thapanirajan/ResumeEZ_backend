@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.models import User
 from src.schema.user_schema import UpdateUserSchema
 from sqlalchemy import select, update
-
+import random
 
 async def register_user_service(db: AsyncSession, user_data: dict):
     user = User(**user_data)
@@ -35,3 +35,7 @@ async def update_user(db: AsyncSession, user_data: UpdateUserSchema, user_id: st
     await db.commit()
 
     return await get_user_by_id(db, user_id)
+
+
+def generate_otp() -> str:
+    return f"{random.randint(100000, 999999)}"

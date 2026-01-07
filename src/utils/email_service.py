@@ -1,24 +1,24 @@
+
+
 import aiosmtplib
 from email.message import EmailMessage
 
-EMAIL_HOST = "smtp.gmail.com"
-EMAIL_PORT = 587
-EMAIL_HOST_USER = "nirajanth2023@gmail.com"
-EMAIL_HOST_PASSWORD = "pgejkbgalvnjdcnq"
+from src.config.env_config import ENV
+from src.utils.email_templates import verification_email_template
 
 
 async def send_verification_email(email: str, token: str):
     msg = EmailMessage()
-    msg["Subject"] = "Verification Email"
-    msg["From"] = EMAIL_HOST_USER
+    msg["Subject"] = "Verify your ResumeEZ account"
+    msg["From"] = f"{ENV.SMTP_FROM_NAME} <{ENV.EMAIL_HOST_USER}>"
     msg["To"] = email
-    msg.set_content("Verification Email Code: " + token)
+    msg.set_content(verification_email_template(token), subtype="html")
 
     await aiosmtplib.send(
         msg,
-        hostname=EMAIL_HOST,
-        port=EMAIL_PORT,
-        username=EMAIL_HOST_USER,
-        password=EMAIL_HOST_PASSWORD,
+        hostname=ENV.EMAIL_HOST,
+        port=ENV.EMAIL_PORT,
+        username=ENV.EMAIL_HOST_USER,
+        password=ENV.EMAIL_HOST_PASSWORD,
         start_tls=True,
     )
