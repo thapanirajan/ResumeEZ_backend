@@ -23,7 +23,19 @@ class UserErrors:
     )
 
     USER_NOT_FOUND = AppException(
-        code="USER_NOT_FOUND",
-        message="User not found",
+        code="INVALID_CREDENTIALS",
+        message="Invalid email or OTP",
         status_code=404,
+    )
+
+    PASSWORD_MISMATCH = AppException(
+        code="PASSWORD_MISMATCH",
+        message="Password and confirm password do not match",
+        status_code=400,
+    )
+
+    USER_NOT_VERIFIED = AppException(
+        code="USER_NOT_VERIFIED",
+        message="User not verified",
+        status_code=401,
     )

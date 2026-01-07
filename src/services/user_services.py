@@ -3,12 +3,12 @@ from typing import Optional, List, Any, Sequence
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
-from src.models.user_model import User, UserRoles
+from src.models.user_model import User, UserRole
 
 
 # create new user service
 async def create_user_service(db: AsyncSession, username: str, email: str, password: str,
-                              role: UserRoles = UserRoles.USER, ) -> User:
+                              role: UserRole = UserRole.JOB_SEEKER, ) -> User:
     db_user = User(
         username=username,
         email=email,
@@ -32,7 +32,7 @@ async def get_user_by_id_service(db: AsyncSession, user_id: str, ) -> Optional[U
 
 
 # get all users
-async def get_all_users(db: AsyncSession, skip: int = 0, limit: int = 100, ) -> Sequence[User]:
+async def get_all_users_service(db: AsyncSession, skip: int = 0, limit: int = 10, ) -> Sequence[User]:
     result = await db.execute(
         select(User)
         .offset(skip)

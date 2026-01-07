@@ -36,5 +36,4 @@ app.add_middleware(
 app.add_exception_handler(AppException, app_exception_handler)
 
 # routes
-
 app.include_router(user_router, prefix="/api/user")
