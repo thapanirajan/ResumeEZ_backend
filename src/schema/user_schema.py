@@ -1,5 +1,6 @@
 from datetime import datetime
 from typing import Optional
+from uuid import UUID
 
 from pydantic import BaseModel, Field, ConfigDict
 
@@ -34,7 +35,12 @@ class UpdateUserSchema(BaseModel):
 
 
 class PasswordlessLoginRequest(BaseModel):
-    email: str
+    email: str = Field(
+        min_length=1,
+        max_length=50,
+        examples=["thapanirajan789@gmail.com"]
+    )
+
 
 
 class PasswordlessLoginResponse(BaseModel):
@@ -44,21 +50,39 @@ class PasswordlessLoginResponse(BaseModel):
 
 class PasswordlessLoginVerify(BaseModel):
     email: str
-    role: Optional[UserRole] = None
     otp: str
+
+
+class SetUserRoleSchema(BaseModel):
+    role: UserRole
+
+class SetRoleResponseData(BaseModel):
+    id: UUID
+    email: str
+    role: UserRole
+
+class SetRoleResponse(BaseModel):
+    success: bool
+    message: str
+    data: SetRoleResponseData
+
 
 
 class LoginResponseData(BaseModel):
     id: str
     email: str
-    token: str
-    role: str
+    role: Optional[str] = None
+
 
 
 class LoginResponse(BaseModel):
     success: bool
     message: str
     data: LoginResponseData
+
+
+class UpdateRoleSchema(BaseModel):
+    role: UserRole
 
 
 class GetAllUserResponse(BaseModel):

@@ -7,8 +7,10 @@ from src.models.user_model import UserRole
 from src.services.user_services import get_user_by_id_service
 from src.utils.jwt_utils import decode_jwt_token
 from src.utils.exceptions import AppException
+from fastapi import Request
 
 security = HTTPBearer()
+
 
 # role checker
 def require_role(required_role: UserRole):
@@ -26,10 +28,17 @@ def require_role(required_role: UserRole):
 
 # authenticate
 async def get_current_user(
-        credentials: HTTPAuthorizationCredentials = Depends(security),
+        req: Request,
         db: AsyncSession = Depends(get_db),
 ):
-    token = credentials.credentials
+    token = req.cookies.get("token")
+
+    if not token:
+        raise AppException(
+            code="UNAUTHORIZED",
+            status_code=401,
+            message="Not authenticated"
+        )
 
     print("---------jwt token-------------")
     print(token)
@@ -48,6 +57,7 @@ async def get_current_user(
         )
 
     user = await get_user_by_id_service(db, user_id)
+    print(user)
 
     if not user:
         raise AppException(

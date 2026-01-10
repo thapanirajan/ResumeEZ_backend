@@ -14,7 +14,8 @@ class Recruiter(Base):
     company_industry = Column(String)
     company_location = Column(String)
     company_website = Column(String)
-    job_title = Column(String)
+    # job_title = Column(String)
+    # job_description = Column(String)
     created_at = Column(DateTime, default=datetime.now)
 
     user = relationship("User", back_populates="recruiter")

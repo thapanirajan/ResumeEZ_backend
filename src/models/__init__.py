@@ -1,7 +1,5 @@
 
 from .user_model import User
-from .password_reset_tokens_model import PasswordResetToken
-from .email_verifications_model import EmailVerification
 from .email_notifications_model import EmailNotification
 
 from .recruiters_model import Recruiter
