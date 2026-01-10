@@ -31,11 +31,3 @@ async def get_user_by_id_service(db: AsyncSession, user_id: str, ) -> Optional[U
     return result.scalar_one_or_none()
 
 
-# get all users
-async def get_all_users_service(db: AsyncSession, skip: int = 0, limit: int = 10, ) -> Sequence[User]:
-    result = await db.execute(
-        select(User)
-        .offset(skip)
-        .limit(limit)
-    )
-    return result.scalars().all()

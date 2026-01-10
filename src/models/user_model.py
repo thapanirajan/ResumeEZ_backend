@@ -27,5 +27,3 @@ class User(Base):
 
     candidate = relationship("Candidate", back_populates="user", uselist=False)
     recruiter = relationship("Recruiter", back_populates="user", uselist=False)
-    email_verifications = relationship("EmailVerification", back_populates="user")
-    password_resets = relationship("PasswordResetToken", back_populates="user")

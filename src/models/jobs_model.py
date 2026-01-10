@@ -12,9 +12,9 @@ class Job(Base):
     recruiter_id = Column(String, ForeignKey("recruiters.id"), nullable=False)
     title = Column(String, nullable=False)
     description = Column(Text, nullable=False)
-    location = Column(String)
-    required_skills = Column(Text)
-    experience_required = Column(Integer)
+    # location = Column(String)
+    # required_skills = Column(Text)
+    # experience_required = Column(Integer)
     created_at = Column(DateTime, default=datetime.now)
 
     recruiter = relationship("Recruiter", back_populates="jobs")
