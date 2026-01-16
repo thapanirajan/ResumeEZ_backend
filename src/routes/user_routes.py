@@ -23,8 +23,6 @@ user_router = APIRouter(tags=["User"])
 
 @user_router.post("/auth/authenticate", response_model=PasswordlessLoginResponse)
 async def authenticate(data: PasswordlessLoginRequest, db: AsyncSession = Depends(get_db)):
-    print("--------- data from frontend---------")
-    print(data)
 
     user = await get_user_by_email(db, data.email)
     otp = generate_email_verification_code()
@@ -54,8 +52,6 @@ async def authenticate(data: PasswordlessLoginRequest, db: AsyncSession = Depend
 @user_router.post("/auth/verify", response_model=LoginResponse)
 async def verify_login(data: PasswordlessLoginVerify, res: Response, db: AsyncSession = Depends(get_db)):
     try:
-        print("----Data from frontend-----")
-        print(data)
         user = await get_user_by_email(db, data.email)
 
         if not user:
@@ -78,7 +74,7 @@ async def verify_login(data: PasswordlessLoginVerify, res: Response, db: AsyncSe
             )
 
         # verify otp
-        if not verify_otp(data.otp, user.otp):
+        if not verify_otp(data.otp_code, user.otp_code):
             raise AppException(
                 code="INVALID_OTP",
                 status_code=400,
@@ -117,12 +113,12 @@ async def verify_login(data: PasswordlessLoginVerify, res: Response, db: AsyncSe
             success=True,
             message="Successfully logged in",
             data=LoginResponseData(
-                id=user.id,
-                email=user.email,
-                role=user.role
+                id=str(user.id),
+                email=user.email
             )
         )
     except Exception as e:
+        print(e)
         raise HTTPException(status_code=500, detail=str(e))
 
 

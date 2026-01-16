@@ -52,7 +52,6 @@ class SetRoleResponse(BaseModel):
 class LoginResponseData(BaseModel):
     id: str
     email: str
-    role: Optional[str] = None
 
 class LoginResponse(BaseModel):
     success: bool
