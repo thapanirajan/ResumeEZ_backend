@@ -1,13 +1,14 @@
 from datetime import timedelta, datetime
 
-from fastapi import APIRouter, HTTPException, Response
+from fastapi import APIRouter, HTTPException
 from fastapi.params import Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.config.db import get_db
 from src.middlewares.auth_middleware import get_current_user
-from src.models import User
-from src.schema.user_schema import UpdateUserSchema, LoginResponse, LoginResponseData, PasswordlessLoginRequest, \
+from src.models import User, CandidateProfile, RecruiterProfile
+from src.models.user_model import UserRole
+from src.schema.user_schema import LoginResponse, LoginResponseData, PasswordlessLoginRequest, \
     PasswordlessLoginResponse, PasswordlessLoginVerify, SetUserRoleSchema, SetRoleResponse, SetRoleResponseData
 from src.services.auth_services import get_user_by_email
 from src.utils.email_service import send_verification_email
@@ -33,16 +34,16 @@ async def authenticate(data: PasswordlessLoginRequest, db: AsyncSession = Depend
     if not user:
         user = User(
             email=data.email,
-            is_email_verified=False,
+            is_verified=False,
         )
 
         db.add(user)
 
-    user.otp = hashed_otp
-    user.otp_expires = datetime.now() + timedelta(minutes=5)
+    user.otp_code = hashed_otp
+    user.expires_at = datetime.now() + timedelta(minutes=5)
     await db.commit()
 
-    await send_verification_email(user.email, otp)
+    await send_verification_email(str(user.email), otp)
 
     return PasswordlessLoginResponse(
         success=True,
@@ -61,7 +62,7 @@ async def verify_login(data: PasswordlessLoginVerify, res: Response, db: AsyncSe
             raise UserErrors.USER_NOT_FOUND
 
         # otp exists
-        if not user.otp or not user.otp_expires:
+        if not user.otp_code or not user.expires_at:
             raise AppException(
                 code="INVALID_OTP",
                 status_code=400,
@@ -69,7 +70,7 @@ async def verify_login(data: PasswordlessLoginVerify, res: Response, db: AsyncSe
             )
 
         # check otp expiry
-        if user.otp_expires < datetime.now():
+        if user.expires_at < datetime.now():
             raise AppException(
                 code="INVALID_OTP",
                 status_code=400,
@@ -85,9 +86,9 @@ async def verify_login(data: PasswordlessLoginVerify, res: Response, db: AsyncSe
             )
 
         # success
-        user.otp = None
-        user.otp_expires = None
-        user.is_email_verified = True
+        user.otp_code = None
+        user.expires_at = None
+        user.is_verified = True
 
         await db.commit()
 
@@ -99,6 +100,8 @@ async def verify_login(data: PasswordlessLoginVerify, res: Response, db: AsyncSe
             },
             expires_delta=timedelta(minutes=60)
         )
+        print("-----Token----------")
+        print(token)
 
         res.set_cookie(
             key="token",
@@ -142,13 +145,22 @@ async def set_user_role(data: SetUserRoleSchema, current_user: User = Depends(ge
     await db.commit()
     await db.refresh(current_user)
 
+    # initialize Recruiter and Candidate Table
+    if data.role == UserRole.JOB_SEEKER:
+        candidate = CandidateProfile(user_id=current_user.id)
+        db.add(candidate)
+    elif data.role == UserRole.RECRUITER:
+        recruiter = RecruiterProfile(user_id=current_user.id)
+        db.add(recruiter)
+
+    await db.commit()
+
     return SetRoleResponse(
         success=True,
         message="Successfully set role",
         data=SetRoleResponseData(
             id=current_user.id,
-            email=current_user.email,
-            role=current_user.role
+            email=current_user.email
         )
     )
 
@@ -163,8 +175,3 @@ async def logout(res: Response):
         "success": True,
         "message": "Successfully logged out"
     }
-
-
-@user_router.patch("/{user_id}")
-async def update_profile(payload: UpdateUserSchema, db: AsyncSession = Depends(get_db), ):
-    pass

@@ -5,7 +5,9 @@ from src.config.base import Base
 from src.config.db import engine
 
 import src.models
+# from src.routes.jobs_routes import recruiter_router
 from src.routes.user_routes import user_router
+from src.routes.upload_routes import upload_router
 from src.utils.exceptions import AppException
 from src.utils.error_handler import app_exception_handler
 
@@ -37,3 +39,5 @@ app.add_exception_handler(AppException, app_exception_handler)
 
 # routes
 app.include_router(user_router, prefix="/api/user")
+# app.include_router(recruiter_router, prefix="/api/recruiter")
+app.include_router(upload_router, prefix="/api/upload")

@@ -17,6 +17,8 @@ dependencies = [
     "pypdf2>=3.0.1",
     "python-dotenv>=1.2.1",
     "python-jose>=3.5.0",
+    "python-multipart>=0.0.21",
     "sqlalchemy>=2.0.45",
+    "supabase>=2.27.2",
     "uvicorn[standard]>=0.38.0",
 ]
