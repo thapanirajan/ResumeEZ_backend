@@ -15,6 +15,9 @@ class Env:
     SMTP_FROM_NAME: str
     JWT_SECRET_KEY: str
     ALGORITHM: str
+    SUPABASE_PROJECT_URL: str
+    SUPABASE_ANON_KEY: str
+    SUPABASE_SERVICE_KEY: str
 
 
 ENV = Env(
@@ -26,6 +29,9 @@ ENV = Env(
     SMTP_FROM_NAME=os.getenv("SMTP_FROM_NAME", "ResumeEZ"),
     JWT_SECRET_KEY=os.getenv("JWT_SECRET_KEY"),
     ALGORITHM=os.getenv("ALGORITHM"),
+    SUPABASE_PROJECT_URL=os.getenv("SUPABASE_PROJECT_URL"),
+    SUPABASE_ANON_KEY=os.getenv("SUPABASE_ANON_KEY"),
+    SUPABASE_SERVICE_KEY=os.getenv("SUPABASE_SERVICE_KEY"),
 )
 
 # Fail fast

@@ -1,9 +1,17 @@
-import uuid
 import enum
+import uuid
 from datetime import datetime
-from sqlalchemy import Column, String, Boolean, DateTime, Enum
-from sqlalchemy.orm import relationship
+from typing import TYPE_CHECKING
+
+from sqlalchemy.dialects.postgresql.base import UUID
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy import (String, Boolean, DateTime, func, Enum)
+
 from src.config.base import Base
+
+if TYPE_CHECKING:
+    from src.models.recruiter_model import RecruiterProfile
+    from src.models.candidate_profile_model import CandidateProfile
 
 
 class UserRole(enum.Enum):
@@ -14,16 +22,53 @@ class UserRole(enum.Enum):
 class User(Base):
     __tablename__ = "users"
 
-    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    email = Column(String, unique=True, nullable=False)
-    password = Column(String, nullable=True)
-    role = Column(Enum(UserRole), nullable=True)
-    is_email_verified = Column(Boolean, default=False)
-    is_active = Column(Boolean, default=True)
-    created_at = Column(DateTime, default=datetime.now())
-    updated_at = Column(DateTime, default=datetime.now(), onupdate=datetime.now())
-    otp = Column(String, nullable=True)
-    otp_expires = Column(DateTime, nullable=True)
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4
+    )
 
-    candidate = relationship("Candidate", back_populates="user", uselist=False)
-    recruiter = relationship("Recruiter", back_populates="user", uselist=False)
+    email: Mapped[str] = mapped_column(
+        String(255),
+        unique=True,
+        nullable=False,
+        index=True
+    )
+
+    role: Mapped[UserRole] = mapped_column(
+        Enum(UserRole, name="user_role"),
+        nullable=True,
+        default=UserRole.JOB_SEEKER
+    )
+
+    is_verified: Mapped[bool] = mapped_column(
+        Boolean,
+        default=False
+    )
+
+    otp_code: Mapped[str] = mapped_column(
+        String(255),
+        nullable=False,
+    )
+
+    expires_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False
+    )
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now()
+    )
+
+    recruiter_profile: Mapped["RecruiterProfile"] = relationship(
+        back_populates="user",
+        uselist=False,
+        cascade="all, delete-orphan"
+    )
+
+    candidate_profile: Mapped["CandidateProfile"] = relationship(
+        back_populates="user",
+        uselist=False,
+        cascade="all, delete-orphan"
+    )
