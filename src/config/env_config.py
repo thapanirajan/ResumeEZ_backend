@@ -18,9 +18,12 @@ class Env:
     SUPABASE_PROJECT_URL: str
     SUPABASE_ANON_KEY: str
     SUPABASE_SERVICE_KEY: str
+    GOOGLE_CLIENT_ID: str
+    GOOGLE_CLIENT_SECRET: str
+    GOOGLE_CLIENT_REDIRECT_URI: str
 
 
-ENV = Env(
+ENV_CONFIG = Env(
     DB_URL=os.getenv("DB_URL"),
     EMAIL_HOST=os.getenv("EMAIL_HOST"),
     EMAIL_PORT=int(os.getenv("EMAIL_PORT", 587)),
@@ -32,8 +35,11 @@ ENV = Env(
     SUPABASE_PROJECT_URL=os.getenv("SUPABASE_PROJECT_URL"),
     SUPABASE_ANON_KEY=os.getenv("SUPABASE_ANON_KEY"),
     SUPABASE_SERVICE_KEY=os.getenv("SUPABASE_SERVICE_KEY"),
+    GOOGLE_CLIENT_ID=os.getenv("GOOGLE_CLIENT_ID"),
+    GOOGLE_CLIENT_SECRET=os.getenv("GOOGLE_CLIENT_SECRET"),
+    GOOGLE_CLIENT_REDIRECT_URI=os.getenv("GOOGLE_CLIENT_REDIRECT_URI")
 )
 
 # Fail fast
-if not ENV.EMAIL_HOST or not ENV.EMAIL_HOST_USER or not ENV.EMAIL_HOST_PASSWORD:
+if not ENV_CONFIG.EMAIL_HOST or not ENV_CONFIG.EMAIL_HOST_USER or not ENV_CONFIG.EMAIL_HOST_PASSWORD:
     raise RuntimeError("Email environment variables are not properly set")

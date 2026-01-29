@@ -1,7 +1,9 @@
 from typing import Optional, List, Any, Sequence
+from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 
 from src.models.user_model import User, UserRole
 
@@ -24,10 +26,13 @@ async def create_user_service(db: AsyncSession, username: str, email: str, passw
 
 
 # get user by id
-async def get_user_by_id_service(db: AsyncSession, user_id: str, ) -> Optional[User]:
+async def get_user_by_id_service(db: AsyncSession, user_id: UUID) -> Optional[User]:
     result = await db.execute(
-        select(User).where(User.id == user_id)
+        select(User)
+        .where(User.id == user_id)
+        .options(
+            selectinload(User.candidate_profile),
+            selectinload(User.recruiter_profile),
+        )
     )
     return result.scalar_one_or_none()
-
-

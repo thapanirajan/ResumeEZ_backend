@@ -5,7 +5,7 @@ from sqlalchemy import pool, text
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncEngine
 from alembic import context
 
-from src.config.env_config import ENV
+from src.config.env_config import ENV_CONFIG
 from src.config.base import Base
 import src.models
 
@@ -20,7 +20,7 @@ if config.config_file_name is not None:
 target_metadata = Base.metadata
 
 # Async database URL
-DB_URL = ENV.DB_URL
+DB_URL = ENV_CONFIG.DB_URL
 if DB_URL is None:
     raise ValueError("DB_URL not found in environment variables")
 config.set_main_option("sqlalchemy.url", DB_URL)

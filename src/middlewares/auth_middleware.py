@@ -1,3 +1,5 @@
+from uuid import UUID
+
 from fastapi import Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -9,7 +11,7 @@ from src.utils.jwt_utils import decode_jwt_token
 from src.utils.exceptions import AppException
 from fastapi import Request
 
-security = HTTPBearer()
+security = HTTPBearer(auto_error=False)
 
 
 # role checker
@@ -30,10 +32,18 @@ def require_role(required_role: UserRole):
 async def get_current_user(
         req: Request,
         db: AsyncSession = Depends(get_db),
+        credentials: HTTPAuthorizationCredentials | None = Depends(security),
 ) -> User:
-    token = req.cookies.get(
-        "token") or "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI3YzY3YjRhZC0zMWE5LTQyNjQtODlkMC0wZjZmYWQyYTczYTUiLCJlbWFpbCI6Im5pcmFqYW50aDIwMjNAZ21haWwuY29tIiwiZXhwIjoxNzY4MTU2NzEzfQ.K8aG3Vm_39kdG8FKVBmh33y-TzmeIGg49Lnv-P1t5JM"
+    token: str | None = None
 
+    if credentials and credentials.scheme.lower() == "bearer":
+        token = credentials.credentials
+
+    if not token:
+        token = req.cookies.get("token")
+
+    print("HOST:", req.headers.get("host"))
+    print("COOKIES:", req.cookies)
     if not token:
         raise AppException(
             code="UNAUTHORIZED",
@@ -57,8 +67,7 @@ async def get_current_user(
             message="Invalid token payload",
         )
 
-    user = await get_user_by_id_service(db, user_id)
-    print(user)
+    user = await get_user_by_id_service(db, UUID(user_id))
 
     if not user:
         raise AppException(

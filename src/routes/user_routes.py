@@ -1,16 +1,25 @@
-from datetime import timedelta, datetime
+import os
+import urllib.parse
+from datetime import timedelta, datetime, timezone
 
+import requests
 from fastapi import APIRouter, HTTPException
 from fastapi.params import Depends
+from google.oauth2 import id_token
+from google.auth.transport import requests as google_requests
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.responses import RedirectResponse
 
 from src.config.db import get_db
+from src.config.env_config import ENV_CONFIG
 from src.middlewares.auth_middleware import get_current_user
 from src.models import User, CandidateProfile, RecruiterProfile
 from src.models.user_model import UserRole
 from src.schema.user_schema import LoginResponse, LoginResponseData, PasswordlessLoginRequest, \
     PasswordlessLoginResponse, PasswordlessLoginVerify, SetUserRoleSchema, SetRoleResponse, SetRoleResponseData
 from src.services.auth_services import get_user_by_email
+from src.services.user_services import get_user_by_id_service
 from src.utils.email_service import send_verification_email
 from src.utils.errors import UserErrors
 from src.utils.exceptions import AppException
@@ -23,7 +32,6 @@ user_router = APIRouter(tags=["User"])
 
 @user_router.post("/auth/authenticate", response_model=PasswordlessLoginResponse)
 async def authenticate(data: PasswordlessLoginRequest, db: AsyncSession = Depends(get_db)):
-
     user = await get_user_by_email(db, data.email)
     otp = generate_email_verification_code()
 
@@ -52,6 +60,8 @@ async def authenticate(data: PasswordlessLoginRequest, db: AsyncSession = Depend
 @user_router.post("/auth/verify", response_model=LoginResponse)
 async def verify_login(data: PasswordlessLoginVerify, res: Response, db: AsyncSession = Depends(get_db)):
     try:
+        print("---------Payload from frontend-------")
+        print(data)
         user = await get_user_by_email(db, data.email)
 
         if not user:
@@ -66,7 +76,7 @@ async def verify_login(data: PasswordlessLoginVerify, res: Response, db: AsyncSe
             )
 
         # check otp expiry
-        if user.expires_at < datetime.now():
+        if user.expires_at < datetime.now(timezone.utc):
             raise AppException(
                 code="INVALID_OTP",
                 status_code=400,
@@ -118,13 +128,87 @@ async def verify_login(data: PasswordlessLoginVerify, res: Response, db: AsyncSe
             )
         )
     except Exception as e:
-        print(e)
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@user_router.get("/auth/google/login")
+async def google_login():
+    params = {
+        "client_id": ENV_CONFIG.GOOGLE_CLIENT_ID,
+        "redirect_uri": ENV_CONFIG.GOOGLE_CLIENT_REDIRECT_URI,
+        "response_type": "code",
+        "scope": "openid email profile",
+        "access_type": "offline",
+        "prompt": "consent",
+    }
+
+    url = "https://accounts.google.com/o/oauth2/v2/auth?" + urllib.parse.urlencode(params)
+    return RedirectResponse(url)
+
+
+@user_router.get("/auth/google/callback")
+async def google_oauth_callback(code: str, res: Response, db: AsyncSession = Depends(get_db)):
+    token_res = requests.post(
+        "https://oauth2.googleapis.com/token",
+        data={
+            "client_id": ENV_CONFIG.GOOGLE_CLIENT_ID,
+            "client_secret": ENV_CONFIG.GOOGLE_CLIENT_SECRET,
+            "code": code,
+            "grant_type": "authorization_code",
+            "redirect_uri": ENV_CONFIG.GOOGLE_CLIENT_REDIRECT_URI,
+        },
+    ).json()
+
+    info = id_token.verify_oauth2_token(
+        token_res["id_token"],
+        google_requests.Request(),
+        ENV_CONFIG.GOOGLE_CLIENT_ID,
+    )
+
+    email = info["email"]
+
+    user = await db.execute(
+        select(User).where(User.email == email)
+    )
+
+    user = user.scalar_one_or_none()
+
+    if not user:
+        user = User(
+            email=email,
+            is_verified=True,
+        )
+
+        db.add(user)
+        await db.commit()
+        await db.refresh(user)
+
+    token = create_jwt_token(
+        data={
+            "sub": str(user.id),
+            "email": user.email
+        },
+        expires_delta=timedelta(minutes=60)
+    )
+
+    # res.set_cookie(
+    #     key="token",
+    #     value=token,
+    #     httponly=True,
+    #     secure=False,
+    #     samesite="lax",
+    #     path="/",
+    #     max_age=60 * 60,
+    # )
+
+    return RedirectResponse(f"http://localhost:3000/auth/callback?token={token}")
+
+
 @user_router.get("/me")
-async def get_logged_in_user(current_user=Depends(get_current_user)):
-    return current_user
+async def get_logged_in_user(current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    user_id = current_user.id
+    user_profile = await get_user_by_id_service(db, user_id)
+    return user_profile
 
 
 @user_router.patch("/auth/set-role", response_model=SetRoleResponse)

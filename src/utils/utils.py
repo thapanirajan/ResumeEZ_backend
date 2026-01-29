@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta, UTC
 from jose import jwt
-from src.config.env_config import ENV
+from src.config.env_config import ENV_CONFIG
 
 
 import bcrypt
