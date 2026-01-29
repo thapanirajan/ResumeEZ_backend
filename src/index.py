@@ -12,6 +12,7 @@ from src.utils.exceptions import AppException
 from src.utils.error_handler import app_exception_handler
 
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import RedirectResponse
 
 
 @asynccontextmanager
@@ -36,6 +37,10 @@ app.add_middleware(
 
 # handles custom error
 app.add_exception_handler(AppException, app_exception_handler)
+
+@app.get("/")
+async def root():
+    return RedirectResponse("/docs")
 
 # routes
 app.include_router(user_router, prefix="/api/user")

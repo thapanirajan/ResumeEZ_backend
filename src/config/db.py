@@ -5,10 +5,7 @@ from  .env_config import ENV_CONFIG
 
 db_url = ENV_CONFIG.DB_URL
 
-engine = create_async_engine(
-    db_url + "?sslmode=require",
-    echo=True,
-)
+engine = create_async_engine(db_url)
 
 AsyncSessionLocal = async_sessionmaker(bind=engine, expire_on_commit=False)
 

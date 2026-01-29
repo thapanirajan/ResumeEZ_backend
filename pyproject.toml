@@ -24,5 +24,3 @@ dependencies = [
     "supabase>=2.27.2",
     "uvicorn[standard]>=0.38.0",
 ]
-[tool.uv.scripts]
-dev = "uv run main.py"
