@@ -10,6 +10,7 @@ from src.models.user_model import UserRole
 from src.schema.jobs_schema import JobResponseSchema, JobCreateSchema
 from src.services.job_services import handle_create_job
 from src.utils.exceptions import AppException
+from src.utils.error_code import ErrorCode
 
 job_router = APIRouter(prefix="/", tags=["Jobs"])
 
@@ -22,22 +23,18 @@ async def create_job(
 ):
     if current_user.role != UserRole.RECRUITER:
         raise AppException(
-            code="UNAUTHORIZED",
+            code=ErrorCode.UNAUTHORIZED_ACCESS,
             message="You are not authorized to perform this action",
-            status_code=status.HTTP_401_UNAUTHORIZED,
         )
     if not payload.description and not payload.jd_file_url:
         raise AppException(
-            code="BAD_REQUEST",
+            code=ErrorCode.INVALID_INPUT,
             message="Please provide description or JD file url",
-            status_code=status.HTTP_400_BAD_REQUEST,
         )
 
-    job = handle_create_job(db, payload, current_user.id)
+    job = await handle_create_job(db, payload, current_user.id)
 
-    return  {
-
-    }
+    return job
 
 # Delete job
 # Update job

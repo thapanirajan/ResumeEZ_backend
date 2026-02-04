@@ -5,7 +5,7 @@ from datetime import datetime
 
 
 class JobCreateSchema(BaseModel):
-    title: str = Field(..., min_length=3)
+    title: str = Field(..., min_length=3, max_length=255)
     description: Optional[str] = Field(
         None,
         description="Raw job description text (copy-paste)"
@@ -13,6 +13,10 @@ class JobCreateSchema(BaseModel):
     jd_file_url: Optional[str] = Field(
         None,
         description="Uploaded JD file URL (PDF/DOC)"
+    )
+    confirm_check: Optional[bool] = Field(
+        False, 
+        description="Flag to confirm creation despite duplicate warning"
     )
 
     model_config = ConfigDict(from_attributes=True)
@@ -39,6 +43,10 @@ class JobResponseSchema(BaseModel):
     id: UUID
     title: str
     description: str
+    status: str
+    processing_status: str
+    experience_level: Optional[str] = None
+    education: Optional[dict] = None
     required_skills: Optional[RequiredSkillsSchema]
 
     model_config = ConfigDict(from_attributes=True)

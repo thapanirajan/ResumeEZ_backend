@@ -2,6 +2,7 @@ from datetime import datetime, timedelta, UTC
 
 from jose import jwt, JWTError
 from src.config.env_config import ENV_CONFIG
+from src.utils.error_code import ErrorCode
 from src.utils.exceptions import AppException
 from src.config.env_config import ENV_CONFIG
 
@@ -23,7 +24,6 @@ def decode_jwt_token(token: str) -> dict:
         return payload
     except JWTError:
         raise AppException(
-            code="INVALID_TOKEN",
-            status_code=401,
-            message="Invalid or expired token",
+            ErrorCode.INVALID_TOKEN,
+            "Invalid or expired token"
         )

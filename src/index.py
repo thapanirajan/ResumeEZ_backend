@@ -38,9 +38,11 @@ app.add_middleware(
 # handles custom error
 app.add_exception_handler(AppException, app_exception_handler)
 
+
 @app.get("/")
 async def root():
     return RedirectResponse("/docs")
+
 
 # routes
 app.include_router(user_router, prefix="/api/user")

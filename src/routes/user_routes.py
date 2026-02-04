@@ -21,6 +21,7 @@ from src.schema.user_schema import LoginResponse, LoginResponseData, Passwordles
 from src.services.auth_services import get_user_by_email
 from src.services.user_services import get_user_by_id_service
 from src.utils.email_service import send_verification_email
+from src.utils.error_code import ErrorCode
 from src.utils.errors import UserErrors
 from src.utils.exceptions import AppException
 from src.utils.jwt_utils import create_jwt_token
@@ -65,30 +66,30 @@ async def verify_login(data: PasswordlessLoginVerify, res: Response, db: AsyncSe
         user = await get_user_by_email(db, data.email)
 
         if not user:
-            raise UserErrors.USER_NOT_FOUND
+            raise AppException(
+                ErrorCode.USER_NOT_FOUND,
+                "User not found"
+            )
 
         # otp exists
         if not user.otp_code or not user.expires_at:
             raise AppException(
-                code="INVALID_OTP",
-                status_code=400,
-                message="Invalid otp"
+                ErrorCode.OTP_EXPIRED,
+                "OTP Expired"
             )
 
         # check otp expiry
         if user.expires_at < datetime.now(timezone.utc):
             raise AppException(
-                code="INVALID_OTP",
-                status_code=400,
-                message="OTP expired"
+                ErrorCode.OTP_EXPIRED,
+                "OTP Expired"
             )
 
         # verify otp
         if not verify_otp(data.otp_code, user.otp_code):
             raise AppException(
-                code="INVALID_OTP",
-                status_code=400,
-                message="Invalid otp"
+                ErrorCode.OTP_EXPIRED,
+                "OTP Expired"
             )
 
         # success
@@ -216,9 +217,8 @@ async def set_user_role(data: SetUserRoleSchema, current_user: User = Depends(ge
                         db: AsyncSession = Depends(get_db)):
     if current_user.role is not None:
         raise AppException(
-            code="ROLE_ALREADY_EXISTS",
-            status_code=400,
-            message="User already has role"
+            ErrorCode.ROLE_ALREADY_SET,
+            "Role already set",
         )
 
     current_user.role = data.role
