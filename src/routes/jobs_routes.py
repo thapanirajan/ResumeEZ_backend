@@ -1,8 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from uuid import UUID
 
-from src.NLP_services.text_normalizer import normalize_text
 from src.config.db import get_db
 from src.middlewares.auth_middleware import get_current_user
 from src.models import User
