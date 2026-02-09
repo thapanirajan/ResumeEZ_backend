@@ -1,3 +1,4 @@
+from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -19,12 +20,12 @@ async def get_user_by_email(db: AsyncSession, email: str):
     return user.scalar_one_or_none()
 
 
-async def get_user_by_id(db: AsyncSession, user_id: str):
+async def get_user_by_id(db: AsyncSession, user_id: UUID):
     user = await db.execute(select(User).where(User.id == user_id))
     return user.scalar_one_or_none()
 
 
-async def update_user(db: AsyncSession, user_data: UpdateUserSchema, user_id: str):
+async def update_user(db: AsyncSession, user_data: UpdateUserSchema, user_id: UUID):
     result = await  db.execute(
         update(User)
         .where(User.id == user_id)

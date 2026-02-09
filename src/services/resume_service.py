@@ -33,7 +33,7 @@ class ResumeService:
         )
 
         result = await  db.execute(stmt)
-        return result.scalar().all()
+        return result.scalars().all()
 
     async def get_resume_by_id(
             self,
