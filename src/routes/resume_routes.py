@@ -1,25 +1,24 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import Session
 from uuid import UUID
 from typing import List
 
 from src.config.db import get_db
 from src.middlewares.auth_middleware import get_current_user, require_role
-from src.models import User
+from src.models import User, Resume
 from src.models.user_model import UserRole
 from src.schema.resume_schema import (
     ResumeCreateSchema,
     ResumeUpdateSchema,
-    ResumeResponseSchema,
-    ResumeInternalCreateSchema
+    ResumeResponseSchema
 )
-from src.services.auth_services import get_user_by_id
+
 from src.services.resume_service import ResumeService
 from src.utils.error_code import ErrorCode
 from src.utils.exceptions import AppException
+from src.utils.permissions import ownership_required
 
-resume_builder_router = APIRouter(prefix="/", tags=["Resume Builder"])
+resume_builder_router = APIRouter(tags=["Resume Builder"])
 
 resume_service = ResumeService()
 
@@ -36,8 +35,15 @@ async def create_resume(
         db: AsyncSession = Depends(get_db),
         candidate: User = Depends(require_role(UserRole.JOB_SEEKER)),
 ):
+    # Ensure profile exists
+    if not candidate.candidate_profile:
+        raise AppException(
+            code=ErrorCode.FORBIDDEN,
+            message="Candidate profile not found. Please set your role first."
+        )
+
     #  calling service layer to handle resume create
-    resume = await  resume_service.create_resume(db, candidate.id, payload)
+    resume = await resume_service.create_resume(db, candidate.candidate_profile.id, payload)
 
     return resume
 
@@ -56,33 +62,44 @@ async def get_candidate_resumes(
             message="Only Candidates can create resumes."
         )
 
-    resumes = await  resume_service.get_resume_by_candidate(db, candidate.id)
+    if not candidate.candidate_profile:
+        return []
+
+    resumes = await resume_service.get_resume_by_candidate(db, candidate.candidate_profile.id)
 
     return resumes
 
 
-#-----------------------Get resume details by id --------------------------------------
+# -----------------------Get resume details by id --------------------------------------
 # GET /resumes/{id}	Get single resume (ownership enforced)
-@resume_builder_router.get("/{resume_id}", response_model=ResumeResponseSchema, status_code=status.HTTP_200_OK)
+@resume_builder_router.get("/{resource_id}", response_model=ResumeResponseSchema, status_code=status.HTTP_200_OK)
 async def get_resume_by_id(
-        db: AsyncSession,
-        resume_id: UUID,
+        resource_id: UUID,
+        db: AsyncSession = Depends(get_db),
         candidate: User = Depends(require_role(UserRole.JOB_SEEKER))
 ):
-    resume = await resume_service.get_resume_by_id(db, resume_id, candidate.id)
+    if not candidate.candidate_profile:
+        raise AppException(ErrorCode.FORBIDDEN, "Candidate profile not found")
+
+    resume = await resume_service.get_resume_by_id(db, resource_id, candidate.candidate_profile.id)
     return resume
 
 
 # -----------------------------Update resume by id ---------------------------------
 # PATCH /resumes/{id}	Partial update
-@resume_builder_router.patch("/{resume_id}", status_code=status.HTTP_200_OK)
+@resume_builder_router.patch("/{resource_id}", status_code=status.HTTP_200_OK)
 async def update_resume(
-        resume_id: UUID,
         payload: ResumeUpdateSchema,
+        resume: Resume = Depends(
+            ownership_required(
+                model=Resume,
+                owner_field="candidate_id",
+                allowed_roles=[UserRole.JOB_SEEKER],
+            )
+        ),
         db: AsyncSession = Depends(get_db),
-        candidate: User = Depends(require_role(UserRole.JOB_SEEKER))
 ):
-    await resume_service.update_resume(db, resume_id, candidate.id, payload)
+    await resume_service.update_resume(db, resume.id, resume.candidate_id, payload)
 
     return {
         "success": True,
@@ -92,13 +109,21 @@ async def update_resume(
 
 # -----------------Delete resume by id----------------------------------------
 # DELETE /resumes/{id}	Delete resume + cascades analyses
-@resume_builder_router.delete("/{resume_id}", status_code=status.HTTP_200_OK)
+@resume_builder_router.delete("/{resource_id}", status_code=status.HTTP_200_OK)
 async def delete_resume(
-        resume_id: UUID,
+        resume: Resume = Depends(
+            ownership_required(
+                model=Resume,
+                owner_field="candidate_id",
+                allowed_roles=[UserRole.JOB_SEEKER],
+            )
+        ),
         db: AsyncSession = Depends(get_db),
         candidate: User = Depends(require_role(UserRole.JOB_SEEKER))
 ):
-    await resume_service.delete_resume(db, resume_id, candidate.id)
+    result = await resume_service.delete_resume(db, resume.id, candidate.candidate_profile.id)
+
+    print(result)
 
     return {
         "success": True,

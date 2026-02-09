@@ -5,7 +5,11 @@ from  .env_config import ENV_CONFIG
 
 db_url = ENV_CONFIG.DB_URL
 
-engine = create_async_engine(db_url)
+engine = create_async_engine(
+    db_url,
+    pool_pre_ping=True,
+    pool_recycle=3600,
+)
 
 AsyncSessionLocal = async_sessionmaker(bind=engine, expire_on_commit=False)
 

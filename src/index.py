@@ -5,6 +5,7 @@ from src.config.base import Base
 from src.config.db import engine
 
 import src.models
+from src.routes.resume_routes import resume_builder_router
 # from src.routes.jobs_routes import recruiter_router
 from src.routes.user_routes import user_router
 from src.routes.upload_routes import upload_router
@@ -44,7 +45,8 @@ async def root():
     return RedirectResponse("/docs")
 
 
-# routes
+# ------------------------------- routes --------------------------------
 app.include_router(user_router, prefix="/api/user")
 # app.include_router(recruiter_router, prefix="/api/recruiter")
 app.include_router(upload_router, prefix="/api/upload")
+app.include_router(resume_builder_router, prefix="/api/resume")
