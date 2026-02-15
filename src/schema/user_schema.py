@@ -1,4 +1,3 @@
-from datetime import datetime
 from typing import Optional
 from uuid import UUID
 
@@ -57,4 +56,43 @@ class LoginResponse(BaseModel):
     success: bool
     message: str
     data: LoginResponseData
+
+
+class CandidateProfileSchema(BaseModel):
+    username: Optional[str] = None
+    full_name: Optional[str] = None
+    current_role: Optional[str] = None
+    experience_years: Optional[int] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class RecruiterProfileSchema(BaseModel):
+    username: Optional[str] = None
+    full_name: Optional[str] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class UserProfileResponseData(BaseModel):
+    id: UUID
+    email: str
+    role: Optional[UserRole] = None
+    candidate_profile: Optional[CandidateProfileSchema] = None
+    recruiter_profile: Optional[RecruiterProfileSchema] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class UserProfileResponse(BaseModel):
+    success: bool
+    message: str
+    data: UserProfileResponseData
+
+
+class UserProfileUpdateSchema(BaseModel):
+    username: Optional[str] = None
+    full_name: Optional[str] = None
+    current_role: Optional[str] = None
+    experience_years: Optional[int] = None
 

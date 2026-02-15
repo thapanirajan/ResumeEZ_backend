@@ -17,7 +17,8 @@ from src.middlewares.auth_middleware import get_current_user
 from src.models import User, CandidateProfile, RecruiterProfile
 from src.models.user_model import UserRole
 from src.schema.user_schema import LoginResponse, LoginResponseData, PasswordlessLoginRequest, \
-    PasswordlessLoginResponse, PasswordlessLoginVerify, SetUserRoleSchema, SetRoleResponse, SetRoleResponseData
+    PasswordlessLoginResponse, PasswordlessLoginVerify, SetUserRoleSchema, SetRoleResponse, SetRoleResponseData, \
+    UserProfileResponse, UserProfileResponseData, UserProfileUpdateSchema
 from src.services.auth_services import get_user_by_email
 from src.services.user_services import get_user_by_id_service
 from src.utils.email_service import send_verification_email
@@ -29,6 +30,21 @@ from src.utils.utils import hash_otp, verify_otp, generate_email_verification_co
 from fastapi import Response
 
 user_router = APIRouter(tags=["User"])
+ACCESS_TOKEN_EXPIRE_DAYS = max(1, ENV_CONFIG.ACCESS_TOKEN_EXPIRE_DAYS)
+ACCESS_TOKEN_EXPIRE_DELTA = timedelta(days=ACCESS_TOKEN_EXPIRE_DAYS)
+ACCESS_TOKEN_MAX_AGE_SECONDS = int(ACCESS_TOKEN_EXPIRE_DELTA.total_seconds())
+
+
+def issue_auth_cookie(response: Response, token: str) -> None:
+    response.set_cookie(
+        key="token",
+        value=token,
+        httponly=True,
+        secure=False,
+        samesite="lax",
+        max_age=ACCESS_TOKEN_MAX_AGE_SECONDS,
+        path="/",
+    )
 
 
 @user_router.post("/auth/authenticate", response_model=PasswordlessLoginResponse)
@@ -59,7 +75,7 @@ async def authenticate(data: PasswordlessLoginRequest, db: AsyncSession = Depend
 
 
 @user_router.post("/auth/verify", response_model=LoginResponse)
-async def verify_login(data: PasswordlessLoginVerify, res: Response, db: AsyncSession = Depends(get_db)):
+async def verify_login(data: PasswordlessLoginVerify, response: Response, db: AsyncSession = Depends(get_db)):
     try:
         print("---------Payload from frontend-------")
         print(data)
@@ -105,20 +121,12 @@ async def verify_login(data: PasswordlessLoginVerify, res: Response, db: AsyncSe
                 "sub": str(user.id),
                 "email": user.email
             },
-            expires_delta=timedelta(minutes=60)
+            expires_delta=ACCESS_TOKEN_EXPIRE_DELTA
         )
         print("-----Token----------")
         print(token)
 
-        res.set_cookie(
-            key="token",
-            value=token,
-            httponly=True,
-            secure=False,
-            samesite="lax",
-            max_age=60 * 60,
-            path="/"
-        )
+        issue_auth_cookie(response, token)
 
         return LoginResponse(
             success=True,
@@ -148,7 +156,7 @@ async def google_login():
 
 
 @user_router.get("/auth/google/callback")
-async def google_oauth_callback(code: str, res: Response, db: AsyncSession = Depends(get_db)):
+async def google_oauth_callback(code: str, db: AsyncSession = Depends(get_db)):
     token_res = requests.post(
         "https://oauth2.googleapis.com/token",
         data={
@@ -189,20 +197,12 @@ async def google_oauth_callback(code: str, res: Response, db: AsyncSession = Dep
             "sub": str(user.id),
             "email": user.email
         },
-        expires_delta=timedelta(minutes=60)
+        expires_delta=ACCESS_TOKEN_EXPIRE_DELTA
     )
 
-    # res.set_cookie(
-    #     key="token",
-    #     value=token,
-    #     httponly=True,
-    #     secure=False,
-    #     samesite="lax",
-    #     path="/",
-    #     max_age=60 * 60,
-    # )
-
-    return RedirectResponse(f"http://localhost:3000/auth/callback?token={token}")
+    redirect = RedirectResponse("http://localhost:3000/auth/callback")
+    issue_auth_cookie(redirect, token)
+    return redirect
 
 
 @user_router.get("/me")
@@ -210,6 +210,83 @@ async def get_logged_in_user(current_user: User = Depends(get_current_user), db:
     user_id = current_user.id
     user_profile = await get_user_by_id_service(db, user_id)
     return user_profile
+
+
+@user_router.get("/profile", response_model=UserProfileResponse)
+async def get_profile(current_user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    user = await get_user_by_id_service(db, current_user.id)
+
+    if user is None:
+        raise AppException(
+            ErrorCode.USER_NOT_FOUND,
+            "User not found",
+        )
+
+    if user.role == UserRole.JOB_SEEKER and user.candidate_profile is None:
+        candidate = CandidateProfile(user_id=user.id)
+        db.add(candidate)
+        await db.commit()
+        user = await get_user_by_id_service(db, current_user.id)
+    elif user.role == UserRole.RECRUITER and user.recruiter_profile is None:
+        recruiter = RecruiterProfile(user_id=user.id)
+        db.add(recruiter)
+        await db.commit()
+        user = await get_user_by_id_service(db, current_user.id)
+
+    return UserProfileResponse(
+        success=True,
+        message="Profile fetched successfully",
+        data=UserProfileResponseData.model_validate(user),
+    )
+
+
+@user_router.patch("/profile", response_model=UserProfileResponse)
+async def update_profile(
+        payload: UserProfileUpdateSchema,
+        current_user: User = Depends(get_current_user),
+        db: AsyncSession = Depends(get_db),
+):
+    user = await get_user_by_id_service(db, current_user.id)
+
+    if user is None:
+        raise AppException(
+            ErrorCode.USER_NOT_FOUND,
+            "User not found",
+        )
+
+    if user.role is None:
+        raise AppException(
+            ErrorCode.INVALID_INPUT,
+            "Role is not set for this user",
+        )
+
+    update_data = payload.model_dump(exclude_unset=True)
+
+    if user.role == UserRole.JOB_SEEKER:
+        if user.candidate_profile is None:
+            user.candidate_profile = CandidateProfile(user_id=user.id)
+
+        allowed_fields = {"username", "full_name", "current_role", "experience_years"}
+        for field, value in update_data.items():
+            if field in allowed_fields:
+                setattr(user.candidate_profile, field, value)
+    elif user.role == UserRole.RECRUITER:
+        if user.recruiter_profile is None:
+            user.recruiter_profile = RecruiterProfile(user_id=user.id)
+
+        allowed_fields = {"username", "full_name"}
+        for field, value in update_data.items():
+            if field in allowed_fields:
+                setattr(user.recruiter_profile, field, value)
+
+    await db.commit()
+
+    updated_user = await get_user_by_id_service(db, current_user.id)
+    return UserProfileResponse(
+        success=True,
+        message="Profile updated successfully",
+        data=UserProfileResponseData.model_validate(updated_user),
+    )
 
 
 @user_router.patch("/auth/set-role", response_model=SetRoleResponse)
