@@ -1,16 +1,16 @@
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from uuid import UUID
-from typing import List
 
 from src.config.db import get_db
-from src.middlewares.auth_middleware import get_current_user, require_role
+from src.middlewares.auth_middleware import require_role
 from src.models import User, Resume
 from src.models.user_model import UserRole
 from src.schema.resume_schema import (
     ResumeCreateSchema,
     ResumeUpdateSchema,
-    ResumeResponseSchema
+    ResumeResponseSchema,
+    CandidateResumeListResponseSchema,
 )
 
 from src.services.resume_service import ResumeService
@@ -50,24 +50,25 @@ async def create_resume(
 
 # ----------------------Get a list of resumes created by logged-in user ------------------------------------------
 # GET /resumes	List resumes owned by candidate
-@resume_builder_router.get("", response_model=List[ResumeResponseSchema], status_code=status.HTTP_200_OK)
+@resume_builder_router.get("", response_model=CandidateResumeListResponseSchema, status_code=status.HTTP_200_OK)
 async def get_candidate_resumes(
         db: AsyncSession = Depends(get_db),
-        candidate: User = Depends(get_current_user)
+        candidate: User = Depends(require_role(UserRole.JOB_SEEKER))
 ):
-    # Route level authorization
-    if candidate.role != UserRole.JOB_SEEKER:
-        raise AppException(
-            code=ErrorCode.FORBIDDEN,
-            message="Only Candidates can create resumes."
-        )
-
     if not candidate.candidate_profile:
-        return []
+        return {
+            "success": True,
+            "message": "No candidate profile found for this user.",
+            "data": [],
+        }
 
-    resumes = await resume_service.get_resume_by_candidate(db, candidate.candidate_profile.id)
+    resumes = await resume_service.get_resumes_by_candidate_id(db, candidate.candidate_profile.id)
 
-    return resumes
+    return {
+        "success": True,
+        "message": "Candidate resumes fetched successfully.",
+        "data": resumes,
+    }
 
 
 # -----------------------Get resume details by id --------------------------------------

@@ -1,10 +1,12 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
+from src.routes.candidate_dashboard_routes import candidate_dashbaord_router
 from src.config.base import Base
 from src.config.db import engine
 
 import src.models
+from src.routes.ollama_routes import ollama_router
 from src.routes.resume_routes import resume_builder_router
 # from src.routes.jobs_routes import recruiter_router
 from src.routes.user_routes import user_router
@@ -50,3 +52,5 @@ app.include_router(user_router, prefix="/api/user")
 # app.include_router(recruiter_router, prefix="/api/recruiter")
 app.include_router(upload_router, prefix="/api/upload")
 app.include_router(resume_builder_router, prefix="/api/resume")
+app.include_router(candidate_dashbaord_router, prefix="/api/candidate/dashboard")
+app.include_router(ollama_router, prefix="/api/ollama")

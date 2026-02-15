@@ -26,6 +26,12 @@ class ResumeResponseSchema(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
+
+class CandidateResumeListResponseSchema(BaseModel):
+    success: bool = True
+    message: str
+    data: List[ResumeResponseSchema]
+
 class ResumeInternalCreateSchema(ResumeCreateSchema):
     candidate_id: UUID
 
