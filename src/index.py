@@ -8,7 +8,6 @@ from src.config.db import engine
 import src.models
 from src.routes.ollama_routes import ollama_router
 from src.routes.resume_routes import resume_builder_router
-# from src.routes.jobs_routes import recruiter_router
 from src.routes.user_routes import user_router
 from src.routes.upload_routes import upload_router
 from src.utils.exceptions import AppException
@@ -20,18 +19,22 @@ from fastapi.responses import RedirectResponse
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Create all DB tables
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+
     yield
     await engine.dispose()
 
 
 app = FastAPI(lifespan=lifespan)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:3000",
         "http://127.0.0.1:3000",
+        "https://resume-ez-frontend-z32r.vercel.app"
     ],
     allow_credentials=True,
     allow_methods=["*"],
@@ -49,7 +52,6 @@ async def root():
 
 # ------------------------------- routes --------------------------------
 app.include_router(user_router, prefix="/api/user")
-# app.include_router(recruiter_router, prefix="/api/recruiter")
 app.include_router(upload_router, prefix="/api/upload")
 app.include_router(resume_builder_router, prefix="/api/resume")
 app.include_router(candidate_dashbaord_router, prefix="/api/candidate/dashboard")

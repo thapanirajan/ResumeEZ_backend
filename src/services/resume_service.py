@@ -12,6 +12,7 @@ from src.schema.resume_schema import (
 
 class ResumeService:
 
+    # ------------------------- Create Resume ---------------------------------------------
     async def create_resume(self, db: AsyncSession, candidate_id: UUID, data: ResumeCreateSchema) -> Resume:
         resume = Resume(
             candidate_id=candidate_id,
@@ -25,6 +26,9 @@ class ResumeService:
 
         return resume
 
+
+
+    # ------------------------- Get Resume By Candidate ID  ---------------------------------------------
     async def get_resumes_by_candidate_id(self, db: AsyncSession, candidate_id: UUID) -> List[Resume]:
         stmt = (
             select(Resume)
@@ -35,6 +39,10 @@ class ResumeService:
         result = await db.execute(stmt)
         return result.scalars().all()
 
+
+
+
+    # ------------------------- Get Resume By Id ---------------------------------------------
     async def get_resume_by_id(
             self,
             db: AsyncSession,
@@ -52,6 +60,7 @@ class ResumeService:
         result = await db.execute(stmt)
         return result.scalars().first()
 
+    # ------------------------- Update Resume ---------------------------------------------
     async def update_resume(
             self,
             db: AsyncSession,
@@ -78,6 +87,7 @@ class ResumeService:
 
         return resume
 
+    # ------------------------- Delete Resume ---------------------------------------------
     async def delete_resume(
             self,
             db: AsyncSession,

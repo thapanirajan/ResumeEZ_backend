@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from typing import TYPE_CHECKING, List
+from typing import TYPE_CHECKING
 
 from sqlalchemy import (DateTime, ForeignKey, Text, String)
 from sqlalchemy.dialects.postgresql import UUID, JSONB
@@ -13,7 +13,6 @@ from src.config.base import Base
 
 if TYPE_CHECKING:
     from src.models.candidate_profile_model import CandidateProfile
-    from src.models.resume_job_analysis_model import ResumeJobAnalysis
 
 
 class Resume(Base):
@@ -57,8 +56,3 @@ class Resume(Base):
     # --------------------RELATIONSHIP-----------------
 
     candidate: Mapped[CandidateProfile] = relationship(back_populates="resumes")
-
-    analyses: Mapped[List[ResumeJobAnalysis]] = relationship(
-        back_populates="resume",
-        cascade="all, delete-orphan"
-    )

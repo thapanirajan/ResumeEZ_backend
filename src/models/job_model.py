@@ -13,9 +13,6 @@ from src.config.base import Base
 
 if TYPE_CHECKING:
     from src.models import RecruiterProfile
-    from src.models.resume_job_analysis_model import ResumeJobAnalysis
-    from src.models.shortlist_model import Shortlist
-
 
 class Job(Base):
     __tablename__ = "jobs"
@@ -56,13 +53,3 @@ class Job(Base):
     )
 
     recruiter: Mapped[RecruiterProfile] = relationship(back_populates="jobs")
-
-    analyses: Mapped[list[ResumeJobAnalysis]] = relationship(
-        back_populates="job",
-        cascade="all, delete-orphan"
-    )
-
-    shortlists: Mapped[List[Shortlist]] = relationship(
-        back_populates="job",
-        cascade="all, delete-orphan"
-    )

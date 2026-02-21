@@ -17,6 +17,7 @@ if TYPE_CHECKING:
 class UserRole(enum.Enum):
     JOB_SEEKER = "JOB_SEEKER"
     RECRUITER = "RECRUITER"
+    ADMIN = "ADMIN"
 
 
 class User(Base):
@@ -37,7 +38,7 @@ class User(Base):
 
     role: Mapped[UserRole] = mapped_column(
         Enum(UserRole, name="user_role"),
-        nullable=True
+        nullable=False
     )
 
     is_verified: Mapped[bool] = mapped_column(
