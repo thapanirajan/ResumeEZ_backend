@@ -1,18 +1,41 @@
 from __future__ import annotations
 
+import enum
 import uuid
 from datetime import datetime
-from typing import TYPE_CHECKING, List
+from typing import TYPE_CHECKING
 
-from sqlalchemy import (String, DateTime, ForeignKey, Text)
-from sqlalchemy.dialects.postgresql import UUID, JSONB
+from sqlalchemy import (
+    String,
+    Text,
+    Integer,
+    DateTime,
+    ForeignKey,
+    Enum
+)
+from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
 from src.config.base import Base
 
 if TYPE_CHECKING:
-    from src.models import RecruiterProfile
+    from src.models.recruiter_model import RecruiterProfile
+
+
+class EmploymentType(enum.Enum):
+    FULL_TIME = "FULL_TIME"
+    PART_TIME = "PART_TIME"
+    INTERNSHIP = "INTERNSHIP"
+    CONTRACT = "CONTRACT"
+    REMOTE = "REMOTE"
+
+
+class JobStatus(enum.Enum):
+    OPEN = "OPEN"
+    CLOSED = "CLOSED"
+    DRAFT = "DRAFT"
+
 
 class Job(Base):
     __tablename__ = "jobs"
@@ -24,32 +47,67 @@ class Job(Base):
     )
 
     recruiter_id: Mapped[uuid.UUID] = mapped_column(
-        ForeignKey("recruiter_profiles.id")
+        ForeignKey("recruiter_profiles.id"),
+        nullable=False
     )
 
-    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    # ---------------- BASIC INFO ----------------
 
-    #JD raw text, JD copy and paste
-    description: Mapped[str] = mapped_column(Text, nullable=False)
+    title: Mapped[str] = mapped_column(
+        String(255),
+        nullable=False
+    )
 
-    # will be store after extracting required skills
-    required_skills: Mapped[dict | None] = mapped_column(JSONB)
-
-    # JD file PDF/DOCS
-    jd_file_url: Mapped[str | None] = mapped_column(
+    description: Mapped[str] = mapped_column(
         Text,
-        nullable=True
+        nullable=False
     )
 
-    status: Mapped[str] = mapped_column(String(20), default="DRAFT") # DRAFT, ACTIVE, CLOSED, ARCHIVED
-    processing_status: Mapped[str] = mapped_column(String(20), default="PROCESSING") # PROCESSING, COMPLETED, FAILED
-    experience_level: Mapped[str | None] = mapped_column(String(100), nullable=True)
-    education: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
-    processing_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    location: Mapped[str | None] = mapped_column(
+        String(255)
+    )
+
+    employment_type: Mapped[EmploymentType] = mapped_column(
+        Enum(EmploymentType),
+        nullable=False
+    )
+
+    experience_required: Mapped[int | None] = mapped_column(
+        Integer
+    )
+
+    salary_min: Mapped[int | None] = mapped_column(
+        Integer
+    )
+
+    salary_max: Mapped[int | None] = mapped_column(
+        Integer
+    )
+
+    application_deadline: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )
+
+    status: Mapped[JobStatus] = mapped_column(
+        Enum(JobStatus),
+        default=JobStatus.OPEN
+    )
+
+    # ---------------- METADATA ----------------
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now()
     )
 
-    recruiter: Mapped[RecruiterProfile] = relationship(back_populates="jobs")
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now()
+    )
+
+    # ---------------- RELATIONSHIP ----------------
+
+    recruiter: Mapped["RecruiterProfile"] = relationship(
+        back_populates="jobs"
+    )
