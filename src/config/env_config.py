@@ -10,6 +10,8 @@ class Env:
     DB_URL: str
     JWT_SECRET_KEY: str
     ALGORITHM: str
+    ENVIRONMENT: str
+    FRONTEND_URL: str
     SUPABASE_PROJECT_URL: str
     SUPABASE_ANON_KEY: str
     SUPABASE_SERVICE_KEY: str
@@ -24,6 +26,8 @@ ENV_CONFIG = Env(
     DB_URL=os.getenv("DB_URL"),
     JWT_SECRET_KEY=os.getenv("JWT_SECRET_KEY"),
     ALGORITHM=os.getenv("ALGORITHM", "HS256"),
+    ENVIRONMENT=os.getenv("ENVIRONMENT", "development"),
+    FRONTEND_URL=os.getenv("FRONTEND_URL", "http://localhost:3000"),
     SUPABASE_PROJECT_URL=os.getenv("SUPABASE_PROJECT_URL"),
     SUPABASE_ANON_KEY=os.getenv("SUPABASE_ANON_KEY"),
     SUPABASE_SERVICE_KEY=os.getenv("SUPABASE_SERVICE_KEY"),
