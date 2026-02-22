@@ -36,12 +36,13 @@ ACCESS_TOKEN_MAX_AGE_SECONDS = int(ACCESS_TOKEN_EXPIRE_DELTA.total_seconds())
 
 
 def issue_auth_cookie(response: Response, token: str) -> None:
+    is_production = os.getenv("ENVIRONMENT", "development") == "production"
     response.set_cookie(
         key="token",
         value=token,
         httponly=True,
-        secure=False,
-        samesite="lax",
+        secure=is_production,
+        samesite="none" if is_production else "lax",
         max_age=ACCESS_TOKEN_MAX_AGE_SECONDS,
         path="/",
     )
@@ -200,7 +201,8 @@ async def google_oauth_callback(code: str, db: AsyncSession = Depends(get_db)):
         expires_delta=ACCESS_TOKEN_EXPIRE_DELTA
     )
 
-    redirect = RedirectResponse("http://localhost:3000/auth/callback")
+    frontend_url = os.getenv("FRONTEND_URL", "http://localhost:3000")
+    redirect = RedirectResponse(f"{frontend_url}/auth/callback")
     issue_auth_cookie(redirect, token)
     return redirect
 
