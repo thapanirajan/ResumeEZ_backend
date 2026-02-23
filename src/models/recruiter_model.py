@@ -38,7 +38,7 @@ class RecruiterProfile(Base):
         nullable=True
     )
 
-    company_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    company_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     company_logo: Mapped[str | None] = mapped_column(String(500))  # logo URL
 

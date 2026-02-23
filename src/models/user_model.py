@@ -36,9 +36,9 @@ class User(Base):
         index=True
     )
 
-    role: Mapped[UserRole] = mapped_column(
+    role: Mapped[UserRole | None] = mapped_column(
         Enum(UserRole, name="user_role"),
-        nullable=False
+        nullable=True
     )
 
     is_verified: Mapped[bool] = mapped_column(
