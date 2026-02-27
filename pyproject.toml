@@ -1,3 +1,6 @@
+[tool.fastapi]
+entryPoint = "src.index:app"
+
 [project]
 name = "backend"
 version = "0.1.0"

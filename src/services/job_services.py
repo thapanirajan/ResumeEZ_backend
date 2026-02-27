@@ -1,11 +1,12 @@
 import uuid
+from datetime import datetime, timezone
 
-from sqlalchemy import select
+from sqlalchemy import select, and_, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.models.job_model import Job, JobStatus
 from src.models.user_model import User, UserRole
-from src.schema.jobs_schema import JobCreateSchema, JobUpdateSchema
+from src.schema.jobs_schema import JobCreateSchema, JobUpdateSchema, JobFilterSchema
 from src.utils.error_code import ErrorCode
 from src.utils.exceptions import AppException
 
@@ -38,6 +39,8 @@ def _get_recruiter_profile_id(current_user: User) -> uuid.UUID:
 async def create_job_service(db: AsyncSession, payload: JobCreateSchema, current_user: User) -> Job:
     recruiter_profile_id = _get_recruiter_profile_id(current_user)
 
+    print(recruiter_profile_id)
+
     _assert_salary_range(payload.salary_min, payload.salary_max)
 
     job = Job(
@@ -58,23 +61,61 @@ async def create_job_service(db: AsyncSession, payload: JobCreateSchema, current
     return job
 
 
-async def list_jobs_service(db: AsyncSession, current_user: User) -> list[Job]:
-    if current_user.role == UserRole.RECRUITER:
-        recruiter_profile_id = _get_recruiter_profile_id(current_user)
-        stmt = (
-            select(Job)
-            .where(Job.recruiter_id == recruiter_profile_id)
-            .order_by(Job.created_at.desc())
-        )
-    elif current_user.role == UserRole.ADMIN:
-        stmt = select(Job).order_by(Job.created_at.desc())
+async def list_jobs_service(db: AsyncSession, current_user: User, filters: JobFilterSchema) -> list[Job]:
+    conditions = []
+
+    if filters.status is not None:
+        conditions.append(Job.status == filters.status)
     else:
-        stmt = (
-            select(Job)
-            .where(Job.status == JobStatus.OPEN)
-            .order_by(Job.created_at.desc())
+        conditions.append(Job.status == JobStatus.OPEN)
+
+    if filters.title:
+        conditions.append(Job.title.ilike(f"%{filters.title}%"))
+
+    if filters.description:
+        conditions.append(Job.description.ilike(f"%{filters.description}%"))
+
+    if filters.location:
+        conditions.append(Job.location.ilike(f"%{filters.location}%"))
+
+    if filters.employment_types:
+        conditions.append(Job.employment_type.in_(filters.employment_types))
+
+    if filters.min_experience is not None:
+        conditions.append(Job.experience_required >= filters.min_experience)
+
+    if filters.max_experience is not None:
+        conditions.append(Job.experience_required <= filters.max_experience)
+
+    if filters.min_salary is not None:
+        conditions.append(Job.salary_min >= filters.min_salary)
+
+    if filters.max_salary is not None:
+        conditions.append(Job.salary_max <= filters.max_salary)
+
+    if filters.deadline_from:
+        conditions.append(Job.application_deadline >= filters.deadline_from)
+
+    if filters.deadline_to:
+        conditions.append(Job.application_deadline <= filters.deadline_to)
+
+    if filters.only_active:
+        now = datetime.now(timezone.utc)
+        conditions.append(
+            or_(Job.application_deadline.is_(None), Job.application_deadline >= now)
         )
 
+    if filters.created_after:
+        conditions.append(Job.created_at >= filters.created_after)
+
+    if filters.created_before:
+        conditions.append(Job.created_at <= filters.created_before)
+
+    sort_col_name = filters.sort_by or "created_at"
+    sort_column = getattr(Job, sort_col_name)
+    order_expr = sort_column.asc() if filters.order == "asc" else sort_column.desc()
+
+    stmt = select(Job).where(and_(*conditions)).order_by(order_expr)
     result = await db.execute(stmt)
     return list(result.scalars().all())
 
@@ -109,10 +150,10 @@ async def get_job_by_id_service(db: AsyncSession, job_id: uuid.UUID, current_use
 
 
 async def update_job_service(
-    db: AsyncSession,
-    job_id: uuid.UUID,
-    payload: JobUpdateSchema,
-    current_user: User,
+        db: AsyncSession,
+        job_id: uuid.UUID,
+        payload: JobUpdateSchema,
+        current_user: User,
 ) -> Job:
     recruiter_profile_id = _get_recruiter_profile_id(current_user)
 
@@ -165,4 +206,19 @@ async def delete_job_service(db: AsyncSession, job_id: uuid.UUID, current_user: 
 
     await db.delete(job)
     await db.commit()
+
+
+
+# ---------------- Returns all the jobs posted by logged-in user (recruiter)
+# ---------------- db , current_user : User object
+async def get_jobs_by_recruiter_service(db: AsyncSession, current_user: User):
+
+    recruiter_profile_id = _get_recruiter_profile_id(current_user)
+    result = await db.execute(
+        select(Job)
+        .where(Job.recruiter_id == recruiter_profile_id)
+        .order_by(Job.created_at.desc())
+    )
+
+    return result.scalars().all()
 

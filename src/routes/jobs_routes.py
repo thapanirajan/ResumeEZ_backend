@@ -1,4 +1,5 @@
 import uuid
+from typing import List
 
 from fastapi import APIRouter, Depends, status, Response
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -7,13 +8,13 @@ from src.config.db import get_db
 from src.middlewares.auth_middleware import get_current_user, require_role
 from src.models import User
 from src.models.user_model import UserRole
-from src.schema.jobs_schema import JobCreateSchema, JobUpdateSchema, JobResponse
+from src.schema.jobs_schema import JobCreateSchema, JobUpdateSchema, JobResponse, JobFilterSchema
 from src.services.job_services import (
     create_job_service,
     delete_job_service,
     get_job_by_id_service,
     list_jobs_service,
-    update_job_service,
+    update_job_service, get_jobs_by_recruiter_service,
 )
 from src.utils.error_code import ErrorCode
 from src.utils.exceptions import AppException
@@ -37,15 +38,14 @@ async def create_job(
     return await create_job_service(db, payload, current_user)
 
 
-
 # ------------------------------- Get ALl Jobs - public route ---------------------------------------
 @job_router.get("/", response_model=list[JobResponse])
 async def get_all_jobs(
+        filters: JobFilterSchema = Depends(),
         db: AsyncSession = Depends(get_db),
         current_user: User = Depends(get_current_user),
 ):
-    return await list_jobs_service(db, current_user)
-
+    return await list_jobs_service(db, current_user, filters)
 
 
 # ---------------------------- Public Route - Get job by id--------------------------------------
@@ -56,7 +56,6 @@ async def get_job_by_id(
         current_user: User = Depends(get_current_user),
 ):
     return await get_job_by_id_service(db, job_id, current_user)
-
 
 
 # ----------------------- Private route - Edit job , Role Required: RECRUITER ------------------------
@@ -70,8 +69,6 @@ async def edit_job(
     return await update_job_service(db, job_id, payload, current_user)
 
 
-
-
 # ------------------- Private route - Delete job , ROLE REQUIRED: RECRUITER ---------------------------
 @job_router.delete("/{job_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_job(
@@ -81,3 +78,17 @@ async def delete_job(
 ):
     await delete_job_service(db, job_id, current_user)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+# /api/jobs/recruiter/me
+# ------------- Private: Get jobs posted by recruiter
+@job_router.get("/recruiter/me", response_model=List[JobResponse])
+async def get_jobs_by_recruiter(
+        db: AsyncSession = Depends(get_db),
+        current_user: User = Depends(get_current_user)
+):
+    jobs = await get_jobs_by_recruiter_service(db, current_user)
+
+    print("------- Job ")
+
+    return jobs

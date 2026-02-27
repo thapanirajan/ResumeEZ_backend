@@ -35,6 +35,7 @@ ACCESS_TOKEN_EXPIRE_DELTA = timedelta(days=ACCESS_TOKEN_EXPIRE_DAYS)
 ACCESS_TOKEN_MAX_AGE_SECONDS = int(ACCESS_TOKEN_EXPIRE_DELTA.total_seconds())
 
 
+
 def issue_auth_cookie(response: Response, token: str) -> None:
     is_production = ENV_CONFIG.ENVIRONMENT == "production"
     response.set_cookie(
