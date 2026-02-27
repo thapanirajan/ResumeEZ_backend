@@ -21,6 +21,7 @@ from src.config.base import Base
 
 if TYPE_CHECKING:
     from src.models.recruiter_model import RecruiterProfile
+    from src.models.job_application_model import JobApplication
 
 
 class EmploymentType(enum.Enum):
@@ -110,4 +111,9 @@ class Job(Base):
 
     recruiter: Mapped["RecruiterProfile"] = relationship(
         back_populates="jobs"
+    )
+
+    applications: Mapped[list["JobApplication"]] = relationship(
+        back_populates="job",
+        cascade="all, delete-orphan",
     )

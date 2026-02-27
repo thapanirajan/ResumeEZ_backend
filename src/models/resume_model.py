@@ -13,6 +13,7 @@ from src.config.base import Base
 
 if TYPE_CHECKING:
     from src.models.candidate_profile_model import CandidateProfile
+    from src.models.job_application_model import JobApplication
 
 
 class Resume(Base):
@@ -56,3 +57,7 @@ class Resume(Base):
     # --------------------RELATIONSHIP-----------------
 
     candidate: Mapped[CandidateProfile] = relationship(back_populates="resumes")
+
+    applications: Mapped[list["JobApplication"]] = relationship(
+        back_populates="resume",
+    )

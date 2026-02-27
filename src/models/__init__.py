@@ -9,3 +9,5 @@ from .candidate_profile_model import CandidateProfile
 
 from src.models.resume_model import Resume
 
+from src.models.job_application_model import JobApplication
+

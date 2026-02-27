@@ -6,6 +6,7 @@ from src.config.base import Base
 from src.config.db import engine
 
 import src.models
+from src.routes.application_routes import application_router
 from src.routes.ollama_routes import ollama_router
 from src.routes.jobs_routes import job_router
 from src.routes.resume_routes import resume_builder_router
@@ -58,4 +59,5 @@ app.include_router(upload_router, prefix="/api/upload")
 app.include_router(resume_builder_router, prefix="/api/resume")
 app.include_router(job_router, prefix="/api/jobs")
 app.include_router(candidate_dashbaord_router, prefix="/api/candidate/dashboard")
+app.include_router(application_router, prefix="/api/applications")
 app.include_router(ollama_router, prefix="/api/ollama")
