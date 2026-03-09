@@ -12,7 +12,10 @@ from src.schema.application_schema import (
     ApplicationCreateSchema,
     ApplicationResponse,
     ApplicationDetailResponse,
+    ApplicationResumeResponse,
+    ApplicationScoresResponse,
     ApplicationStatusUpdateSchema,
+    JobWithApplicantsSchema,
 )
 from src.services.application_service import (
     apply_to_job_service,
@@ -20,6 +23,9 @@ from src.services.application_service import (
     get_applications_for_job_service,
     get_my_applications_service,
     update_application_status_service,
+    get_job_with_applicants_service,
+    get_application_resume_service,
+    score_applications_for_job_service,
 )
 
 application_router = APIRouter(tags=["Applications"])
@@ -81,7 +87,47 @@ async def get_applications_for_job(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    return await get_applications_for_job_service(db, job_id, current_user)
+    applicants = await get_applications_for_job_service(db, job_id, current_user)
+    print(applicants)
+    return  applicants
+
+# ─── GET /api/applications/job/{job_id}/with-applicants ──────────────────────
+@application_router.get(
+    "/job/{job_id}/with-applicants",
+    response_model=JobWithApplicantsSchema,
+)
+async def get_job_with_applicants(
+    job_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return await get_job_with_applicants_service(db, job_id, current_user)
+
+
+# ─── GET /api/applications/job/{job_id}/ai-scores ────────────────────────────
+@application_router.get(
+    "/job/{job_id}/ai-scores",
+    response_model=ApplicationScoresResponse,
+)
+async def score_applications_for_job(
+    job_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return await score_applications_for_job_service(db, job_id, current_user)
+
+
+# ─── GET /api/applications/{application_id}/resume ───────────────────────────
+@application_router.get(
+    "/{application_id}/resume",
+    response_model=ApplicationResumeResponse,
+)
+async def get_application_resume(
+    application_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return await get_application_resume_service(db, application_id, current_user)
 
 
 # ─── PATCH /api/applications/{application_id}/status ─────────────────────────

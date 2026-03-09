@@ -89,6 +89,12 @@ async def get_jobs_by_recruiter(
 ):
     jobs = await get_jobs_by_recruiter_service(db, current_user)
 
-    print("------- Job ")
-
     return jobs
+
+
+
+
+# -------------------- Get list of applicants that applied for each job---------------------
+@job_router.get("/recruiter/me/applicants/{job_id}")
+async def get_applicants_by_job():
+    pass
