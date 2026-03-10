@@ -11,3 +11,5 @@ from src.models.resume_model import Resume
 
 from src.models.job_application_model import JobApplication
 
+from src.models.external_application_model import ExternalApplication
+

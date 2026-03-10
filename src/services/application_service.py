@@ -1,12 +1,15 @@
+import io
 import re
 import uuid
 
+import httpx
 from sqlalchemy import select, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import selectinload
 
 from src.models.candidate_profile_model import CandidateProfile
+from src.models.external_application_model import ExternalApplication
 from src.models.job_application_model import JobApplication, ApplicationStatus
 from src.models.job_model import Job, JobStatus
 from src.models.resume_model import Resume
@@ -17,6 +20,7 @@ from src.schema.application_schema import (
     ApplicationDetailResponse,
     ApplicationResumeResponse,
     ApplicationScoreItem,
+    ExternalApplicationScoreItem,
     ApplicationScoresResponse,
     JobWithApplicantsSchema,
 )
@@ -388,6 +392,49 @@ def _score(job_description: str, resume_data: dict) -> int:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Text extraction from uploaded resume files (PDF / DOCX)
+# ─────────────────────────────────────────────────────────────────────────────
+
+async def _extract_text_from_url(url: str, filename: str) -> str:
+    """Download a resume file from a URL and return its plain text."""
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            response = await client.get(url)
+            response.raise_for_status()
+            content = response.content
+    except Exception:
+        return ""
+
+    fname = filename.lower()
+    try:
+        if fname.endswith(".pdf"):
+            import PyPDF2
+            reader = PyPDF2.PdfReader(io.BytesIO(content), strict=False)
+            return " ".join(page.extract_text() or "" for page in reader.pages)
+        elif fname.endswith(".docx"):
+            import docx
+            doc = docx.Document(io.BytesIO(content))
+            return " ".join(para.text for para in doc.paragraphs)
+    except Exception:
+        pass
+    return ""
+
+
+def _score_text(job_description: str, text: str) -> int:
+    """Keyword-coverage score against arbitrary plain text."""
+    if not text.strip():
+        return 0
+    job_kw = _keywords(job_description)
+    if not job_kw:
+        return 0
+    resume_kw = _keywords(text)
+    if not resume_kw:
+        return 0
+    coverage = len(job_kw & resume_kw) / len(job_kw)
+    return min(98, round(coverage * 100))
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # GET /api/applications/job/{job_id}/ai-scores  — Score all applicants
 # ─────────────────────────────────────────────────────────────────────────────
 async def score_applications_for_job_service(
@@ -407,6 +454,7 @@ async def score_applications_for_job_service(
     if job.recruiter_id != recruiter_profile.id:
         raise AppException(ErrorCode.UNAUTHORIZED_ACCESS, "Not authorized")
 
+    # ── Platform applications (JSON resume data) ──────────────────────────────
     app_result = await db.execute(
         select(JobApplication).where(JobApplication.job_id == job_id)
     )
@@ -421,4 +469,19 @@ async def score_applications_for_job_service(
         s = _score(job.description, resume.resume_data) if resume else 0
         scores.append(ApplicationScoreItem(application_id=app.id, score=s))
 
-    return ApplicationScoresResponse(scores=scores)
+    # ── External applications (uploaded PDF/DOCX files) ───────────────────────
+    ext_result = await db.execute(
+        select(ExternalApplication).where(ExternalApplication.job_id == job_id)
+    )
+    external_applications = list(ext_result.scalars().all())
+
+    external_scores: list[ExternalApplicationScoreItem] = []
+    for ext in external_applications:
+        text = await _extract_text_from_url(ext.resume_file_url, ext.resume_filename)
+        # Supplement with recruiter-provided notes for richer matching
+        if ext.notes:
+            text = f"{text} {ext.notes}"
+        s = _score_text(job.description, text)
+        external_scores.append(ExternalApplicationScoreItem(external_application_id=ext.id, score=s))
+
+    return ApplicationScoresResponse(scores=scores, external_scores=external_scores)

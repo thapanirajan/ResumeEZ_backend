@@ -67,8 +67,14 @@ class ApplicationScoreItem(BaseModel):
     score: int  # 0–100
 
 
+class ExternalApplicationScoreItem(BaseModel):
+    external_application_id: uuid.UUID
+    score: int  # 0–100
+
+
 class ApplicationScoresResponse(BaseModel):
     scores: list[ApplicationScoreItem]
+    external_scores: list[ExternalApplicationScoreItem] = []
 
 
 # ─── Schemas for get_job_with_applicants_service ──────────────────────────────

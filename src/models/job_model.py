@@ -22,6 +22,7 @@ from src.config.base import Base
 if TYPE_CHECKING:
     from src.models.recruiter_model import RecruiterProfile
     from src.models.job_application_model import JobApplication
+    from src.models.external_application_model import ExternalApplication
 
 
 class EmploymentType(enum.Enum):
@@ -114,6 +115,11 @@ class Job(Base):
     )
 
     applications: Mapped[list["JobApplication"]] = relationship(
+        back_populates="job",
+        cascade="all, delete-orphan",
+    )
+
+    external_applications: Mapped[list["ExternalApplication"]] = relationship(
         back_populates="job",
         cascade="all, delete-orphan",
     )

@@ -1,13 +1,14 @@
 import uuid
 from typing import List
 
-from fastapi import APIRouter, Depends, status, Response
+from fastapi import APIRouter, Depends, status, Response, UploadFile, File, Form
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.config.db import get_db
 from src.middlewares.auth_middleware import get_current_user
 from src.models import User
 from src.models.job_application_model import ApplicationStatus
+from src.models.external_application_model import ExternalApplicationSource, ExternalApplicationStatus
 from src.schema.application_schema import (
     ApplicationCreateSchema,
     ApplicationResponse,
@@ -16,6 +17,11 @@ from src.schema.application_schema import (
     ApplicationScoresResponse,
     ApplicationStatusUpdateSchema,
     JobWithApplicantsSchema,
+)
+from src.schema.external_application_schema import (
+    ExternalApplicationCreateSchema,
+    ExternalApplicationResponse,
+    ExternalApplicationStatusUpdateSchema,
 )
 from src.services.application_service import (
     apply_to_job_service,
@@ -26,6 +32,11 @@ from src.services.application_service import (
     get_job_with_applicants_service,
     get_application_resume_service,
     score_applications_for_job_service,
+)
+from src.services.external_application_service import (
+    upload_external_application_service,
+    get_external_applications_service,
+    update_external_application_status_service,
 )
 
 application_router = APIRouter(tags=["Applications"])
@@ -143,4 +154,58 @@ async def update_application_status(
 ):
     return await update_application_status_service(
         db, application_id, payload.status, current_user
+    )
+
+
+# ─── POST /api/applications/job/{job_id}/external ────────────────────────────
+@application_router.post(
+    "/job/{job_id}/external",
+    status_code=status.HTTP_201_CREATED,
+    response_model=ExternalApplicationResponse,
+)
+async def upload_external_resume(
+    job_id: uuid.UUID,
+    file: UploadFile = File(...),
+    candidate_name: str = Form(...),
+    candidate_email: str | None = Form(default=None),
+    source: ExternalApplicationSource = Form(default=ExternalApplicationSource.OTHER),
+    notes: str | None = Form(default=None),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    payload = ExternalApplicationCreateSchema(
+        candidate_name=candidate_name,
+        candidate_email=candidate_email,
+        source=source,
+        notes=notes,
+    )
+    return await upload_external_application_service(db, job_id, payload, file, current_user)
+
+
+# ─── GET /api/applications/job/{job_id}/external ─────────────────────────────
+@application_router.get(
+    "/job/{job_id}/external",
+    response_model=List[ExternalApplicationResponse],
+)
+async def get_external_applications(
+    job_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return await get_external_applications_service(db, job_id, current_user)
+
+
+# ─── PATCH /api/applications/external/{external_id}/status ───────────────────
+@application_router.patch(
+    "/external/{external_id}/status",
+    response_model=ExternalApplicationResponse,
+)
+async def update_external_application_status(
+    external_id: uuid.UUID,
+    payload: ExternalApplicationStatusUpdateSchema,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return await update_external_application_status_service(
+        db, external_id, payload.status, current_user
     )
