@@ -12,6 +12,8 @@ from src.models.user_model import User, UserRole
 from src.schema.external_application_schema import (
     ExternalApplicationCreateSchema,
     ExternalApplicationResponse,
+    BulkUploadResultItem,
+    BulkUploadResponse,
 )
 from src.utils.error_code import ErrorCode
 from src.utils.exceptions import AppException
@@ -86,6 +88,94 @@ async def upload_external_application_service(
     await db.commit()
     await db.refresh(external_app)
     return external_app
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# POST /api/applications/job/{job_id}/external/bulk
+# ─────────────────────────────────────────────────────────────────────────────
+async def bulk_upload_external_applications_service(
+    db: AsyncSession,
+    job_id: uuid.UUID,
+    files: list[UploadFile],
+    candidate_names: list[str],
+    source: "ExternalApplicationSource",
+    notes: str | None,
+    current_user: User,
+) -> BulkUploadResponse:
+    if current_user.role != UserRole.RECRUITER:
+        raise AppException(ErrorCode.FORBIDDEN, "Only recruiters can upload external resumes")
+
+    recruiter_profile = _get_recruiter_profile(current_user)
+
+    job_result = await db.execute(select(Job).where(Job.id == job_id))
+    job = job_result.scalar_one_or_none()
+    if job is None:
+        raise AppException(ErrorCode.RESOURCE_NOT_FOUND, "Job not found")
+    if job.recruiter_id != recruiter_profile.id:
+        raise AppException(ErrorCode.UNAUTHORIZED_ACCESS, "You are not authorized to upload resumes for this job")
+
+    results: list[BulkUploadResultItem] = []
+
+    # ── Phase 1: upload files to Supabase (independent, no DB involved) ───────
+    # Collect (candidate_name, resume_url, original_filename) for successes
+    upload_successes: list[tuple[str, str, str]] = []  # (name, url, filename)
+
+    for idx, file in enumerate(files):
+        raw_filename = file.filename or f"resume_{idx + 1}"
+        candidate_name = (
+            candidate_names[idx].strip()
+            if idx < len(candidate_names) and candidate_names[idx].strip()
+            else raw_filename.rsplit(".", 1)[0]
+        )
+        try:
+            resume_url, original_filename = await _upload_file_to_supabase(file)
+            upload_successes.append((candidate_name, resume_url, original_filename))
+            results.append(BulkUploadResultItem(filename=raw_filename, success=True))
+        except Exception as e:
+            results.append(BulkUploadResultItem(filename=raw_filename, success=False, error=str(e)))
+
+    if not upload_successes:
+        return BulkUploadResponse(results=results, uploaded_count=0, failed_count=len(results))
+
+    # ── Phase 2: insert all successful uploads in a single DB transaction ─────
+    new_apps: list[ExternalApplication] = []
+    for candidate_name, resume_url, original_filename in upload_successes:
+        ext_app = ExternalApplication(
+            job_id=job_id,
+            candidate_name=candidate_name,
+            source=source,
+            resume_file_url=resume_url,
+            resume_filename=original_filename,
+            notes=notes,
+        )
+        db.add(ext_app)
+        new_apps.append(ext_app)
+
+    try:
+        await db.commit()
+        for ext_app in new_apps:
+            await db.refresh(ext_app)
+    except Exception as e:
+        await db.rollback()
+        # Mark all previously-successful results as failed
+        commit_error = f"Database commit failed: {e}"
+        success_idx = 0
+        for r in results:
+            if r.success:
+                r.success = False
+                r.error = commit_error
+                success_idx += 1
+        return BulkUploadResponse(results=results, uploaded_count=0, failed_count=len(results))
+
+    # Attach DB records to their corresponding result items
+    app_iter = iter(new_apps)
+    for r in results:
+        if r.success:
+            r.data = ExternalApplicationResponse.model_validate(next(app_iter))
+
+    uploaded = sum(1 for r in results if r.success)
+    failed = len(results) - uploaded
+    return BulkUploadResponse(results=results, uploaded_count=uploaded, failed_count=failed)
 
 
 # ─────────────────────────────────────────────────────────────────────────────

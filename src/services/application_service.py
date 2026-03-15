@@ -478,7 +478,6 @@ async def score_applications_for_job_service(
     external_scores: list[ExternalApplicationScoreItem] = []
     for ext in external_applications:
         text = await _extract_text_from_url(ext.resume_file_url, ext.resume_filename)
-        # Supplement with recruiter-provided notes for richer matching
         if ext.notes:
             text = f"{text} {ext.notes}"
         s = _score_text(job.description, text)

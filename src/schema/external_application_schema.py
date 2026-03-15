@@ -39,3 +39,16 @@ class ExternalApplicationResponse(BaseModel):
     updated_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class BulkUploadResultItem(BaseModel):
+    filename: str
+    success: bool
+    data: Optional[ExternalApplicationResponse] = None
+    error: Optional[str] = None
+
+
+class BulkUploadResponse(BaseModel):
+    results: list[BulkUploadResultItem]
+    uploaded_count: int
+    failed_count: int

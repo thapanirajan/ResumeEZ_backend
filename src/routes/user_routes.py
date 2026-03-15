@@ -138,6 +138,7 @@ async def verify_login(data: PasswordlessLoginVerify, response: Response, db: As
                 email=user.email
             )
         )
+    
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

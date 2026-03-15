@@ -1,3 +1,4 @@
+import json
 import uuid
 from typing import List
 
@@ -22,6 +23,7 @@ from src.schema.external_application_schema import (
     ExternalApplicationCreateSchema,
     ExternalApplicationResponse,
     ExternalApplicationStatusUpdateSchema,
+    BulkUploadResponse,
 )
 from src.services.application_service import (
     apply_to_job_service,
@@ -35,6 +37,7 @@ from src.services.application_service import (
 )
 from src.services.external_application_service import (
     upload_external_application_service,
+    bulk_upload_external_applications_service,
     get_external_applications_service,
     update_external_application_status_service,
 )
@@ -208,4 +211,29 @@ async def update_external_application_status(
 ):
     return await update_external_application_status_service(
         db, external_id, payload.status, current_user
+    )
+
+
+# ─── POST /api/applications/job/{job_id}/external/bulk ───────────────────────
+@application_router.post(
+    "/job/{job_id}/external/bulk",
+    status_code=status.HTTP_200_OK,
+    response_model=BulkUploadResponse,
+)
+async def bulk_upload_external_resumes(
+    job_id: uuid.UUID,
+    files: List[UploadFile] = File(...),
+    candidate_names: str = Form(...),   # JSON-encoded list e.g. '["Alice","Bob"]'
+    source: ExternalApplicationSource = Form(default=ExternalApplicationSource.OTHER),
+    notes: str | None = Form(default=None),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    try:
+        names: list[str] = json.loads(candidate_names)
+    except (json.JSONDecodeError, TypeError):
+        names = []
+
+    return await bulk_upload_external_applications_service(
+        db, job_id, files, names, source, notes, current_user
     )
