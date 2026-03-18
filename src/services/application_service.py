@@ -56,6 +56,7 @@ async def apply_to_job_service(
     payload: ApplicationCreateSchema,
     current_user: User,
 ) -> JobApplication:
+    # checks if the logged in use is JOB SEEKER or not
     if current_user.role != UserRole.JOB_SEEKER:
         raise AppException(ErrorCode.FORBIDDEN, "Only candidates can apply to jobs")
 
