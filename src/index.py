@@ -9,6 +9,7 @@ from src.config.db import engine
 import src.models
 from src.routes.application_routes import application_router
 from src.routes.ollama_routes import ollama_router
+from src.routes.skill_gap_routes import skill_gap_router
 from src.routes.jobs_routes import job_router
 from src.routes.resume_routes import resume_builder_router
 from src.routes.user_routes import user_router
@@ -63,3 +64,4 @@ app.include_router(candidate_dashbaord_router, prefix="/api/candidate/dashboard"
 app.include_router(recruiter_dashboard_router, prefix="/api/recruiter/dashboard")
 app.include_router(application_router, prefix="/api/applications")
 app.include_router(ollama_router, prefix="/api/ollama")
+app.include_router(skill_gap_router, prefix="/api/skill-gap")

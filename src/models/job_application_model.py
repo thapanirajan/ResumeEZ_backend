@@ -8,11 +8,12 @@ from typing import TYPE_CHECKING
 from sqlalchemy import (
     DateTime,
     ForeignKey,
+    Integer,
     Text,
     Enum,
     UniqueConstraint,
 )
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
@@ -66,6 +67,10 @@ class JobApplication(Base):
     )
 
     cover_letter: Mapped[str | None] = mapped_column(Text)
+
+    ai_score: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    ai_analysis: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    ai_scored_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     applied_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

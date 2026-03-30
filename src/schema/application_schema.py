@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel, ConfigDict
 
@@ -62,19 +62,93 @@ class ApplicationResumeResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+# ─── AI Analysis Types ────────────────────────────────────────────────────────
+
+class MatchedSkillItemSchema(BaseModel):
+    name: str
+    canonical_id: str
+    match_type: Literal["exact", "fuzzy", "semantic"]
+    confidence: float
+    category: str
+    years: int = 0
+    weighted_score: float = 0.0
+
+
+class MissingSkillItemSchema(BaseModel):
+    name: str
+    canonical_id: str
+    category: str
+    computed_weight: float
+    priority_score: float
+    section: Literal["required", "preferred", "general"]
+
+
+class ExtraSkillItemSchema(BaseModel):
+    name: str
+    canonical_id: str
+    category: str
+
+
+class ApplicationAnalysisSchema(BaseModel):
+    ats_score: int
+    skills_score: int
+    experience_score: int
+    education_score: int
+    matched_skills: list[MatchedSkillItemSchema]
+    missing_skills: list[MissingSkillItemSchema]
+    extra_skills: list[ExtraSkillItemSchema]
+    gap_report: str
+    reasoning: str
+
+
 class ApplicationScoreItem(BaseModel):
     application_id: uuid.UUID
     score: int  # 0–100
+    analysis: Optional[ApplicationAnalysisSchema] = None
 
 
 class ExternalApplicationScoreItem(BaseModel):
     external_application_id: uuid.UUID
     score: int  # 0–100
+    analysis: Optional[ApplicationAnalysisSchema] = None
 
 
 class ApplicationScoresResponse(BaseModel):
     scores: list[ApplicationScoreItem]
     external_scores: list[ExternalApplicationScoreItem] = []
+
+
+# ─── Skill Gap Analysis Response (for candidate endpoint) ─────────────────────
+
+class RoadmapSkillItemSchema(BaseModel):
+    name: str
+    canonical_id: str
+    category: str
+    domain: Optional[str] = None
+    is_prerequisite: bool
+    priority_score: float
+    subtopics: list[str] = []
+
+
+class RoadmapPhasesSchema(BaseModel):
+    phase_1_core: list[RoadmapSkillItemSchema] = []
+    phase_2_primary: list[RoadmapSkillItemSchema] = []
+    phase_3_advanced: list[RoadmapSkillItemSchema] = []
+
+
+class SkillGapAnalysisResponse(BaseModel):
+    analysis_id: str
+    resume_id: str
+    match_percentage: float
+    total_jd_skills: int
+    hard_skill_match: Optional[float] = None
+    soft_skill_match: Optional[float] = None
+    matched_skills: list[MatchedSkillItemSchema]
+    missing_skills: list[MissingSkillItemSchema]
+    extra_skills: list[ExtraSkillItemSchema]
+    gap_report: str
+    roadmap: RoadmapPhasesSchema
+    ontology_version: str = "ollama-bge-v1"
 
 
 # ─── Schemas for get_job_with_applicants_service ──────────────────────────────

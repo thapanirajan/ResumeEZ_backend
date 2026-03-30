@@ -1,6 +1,8 @@
+import asyncio
 import io
 import re
 import uuid
+from datetime import datetime, timezone
 
 import httpx
 from sqlalchemy import select, and_
@@ -22,8 +24,13 @@ from src.schema.application_schema import (
     ApplicationScoreItem,
     ExternalApplicationScoreItem,
     ApplicationScoresResponse,
+    ApplicationAnalysisSchema,
+    MatchedSkillItemSchema,
+    MissingSkillItemSchema,
+    ExtraSkillItemSchema,
     JobWithApplicantsSchema,
 )
+from src.services.ai_pipeline_service import run_pipeline, PipelineResult
 from src.utils.error_code import ErrorCode
 from src.utils.exceptions import AppException
 
@@ -338,63 +345,16 @@ async def get_application_resume_service(
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Keyword-based resume scoring helpers
-# ─────────────────────────────────────────────────────────────────────────────
-
-_STOP_WORDS: frozenset[str] = frozenset({
-    "a", "an", "the", "and", "or", "but", "in", "on", "at", "to", "for",
-    "of", "with", "by", "from", "is", "are", "was", "were", "be", "been",
-    "have", "has", "had", "do", "does", "did", "will", "would", "could",
-    "should", "may", "might", "must", "can", "we", "you", "he", "she",
-    "it", "they", "this", "that", "these", "those", "i", "me", "my",
-    "our", "your", "their", "its", "not", "no", "as", "so", "if", "then",
-})
-
-
-def _keywords(text: str) -> set[str]:
-    words = re.findall(r"[a-zA-Z]+", text.lower())
-    return {w for w in words if len(w) > 2 and w not in _STOP_WORDS}
-
-
-def _resume_text(resume_data: dict) -> str:
-    parts: list[str] = []
-    for field in ("name", "title", "summary", "location"):
-        if v := resume_data.get(field):
-            parts.append(str(v))
-    for exp in resume_data.get("experience", []):
-        for field in ("role", "company", "description"):
-            if v := exp.get(field):
-                parts.append(str(v))
-    for edu in resume_data.get("education", []):
-        for field in ("institution", "degree", "fieldOfStudy", "honors"):
-            if v := edu.get(field):
-                parts.append(str(v))
-    for proj in resume_data.get("projects", []):
-        for field in ("name", "role", "techStack", "description"):
-            if v := proj.get(field):
-                parts.append(str(v))
-    for skill in resume_data.get("skills", []):
-        for field in ("category", "items"):
-            if v := skill.get(field):
-                parts.append(str(v))
-    return " ".join(parts)
-
-
-def _score(job_description: str, resume_data: dict) -> int:
-    """Return a 0-100 keyword-coverage score."""
-    job_kw = _keywords(job_description)
-    if not job_kw:
-        return 0
-    resume_kw = _keywords(_resume_text(resume_data))
-    if not resume_kw:
-        return 0
-    coverage = len(job_kw & resume_kw) / len(job_kw)
-    return min(98, round(coverage * 100))
-
-
-# ─────────────────────────────────────────────────────────────────────────────
 # Text extraction from uploaded resume files (PDF / DOCX)
 # ─────────────────────────────────────────────────────────────────────────────
+
+def _keywords(text: str) -> set[str]:
+    """Kept as utility for other parts of the codebase."""
+    stop = frozenset({"a", "an", "the", "and", "or", "but", "in", "on", "at", "to", "for",
+                      "of", "with", "by", "from", "is", "are", "was", "were", "be", "been"})
+    words = re.findall(r"[a-zA-Z]+", text.lower())
+    return {w for w in words if len(w) > 2 and w not in stop}
+
 
 async def _extract_text_from_url(url: str, filename: str) -> str:
     """Download a resume file from a URL and return its plain text."""
@@ -421,18 +381,47 @@ async def _extract_text_from_url(url: str, filename: str) -> str:
     return ""
 
 
-def _score_text(job_description: str, text: str) -> int:
-    """Keyword-coverage score against arbitrary plain text."""
-    if not text.strip():
-        return 0
-    job_kw = _keywords(job_description)
-    if not job_kw:
-        return 0
-    resume_kw = _keywords(text)
-    if not resume_kw:
-        return 0
-    coverage = len(job_kw & resume_kw) / len(job_kw)
-    return min(98, round(coverage * 100))
+def _pipeline_result_to_analysis_schema(result: PipelineResult) -> ApplicationAnalysisSchema:
+    """Convert PipelineResult dataclass to Pydantic schema."""
+    return ApplicationAnalysisSchema(
+        ats_score=result.ats_score,
+        skills_score=result.skills_score,
+        experience_score=result.experience_score,
+        education_score=result.education_score,
+        matched_skills=[
+            MatchedSkillItemSchema(
+                name=s.name,
+                canonical_id=s.canonical_id,
+                match_type=s.match_type,
+                confidence=s.confidence,
+                category=s.category,
+                years=s.years,
+                weighted_score=s.weighted_score,
+            )
+            for s in result.matched_skills
+        ],
+        missing_skills=[
+            MissingSkillItemSchema(
+                name=s.name,
+                canonical_id=s.canonical_id,
+                category=s.category,
+                computed_weight=s.computed_weight,
+                priority_score=s.priority_score,
+                section=s.section,
+            )
+            for s in result.missing_skills
+        ],
+        extra_skills=[
+            ExtraSkillItemSchema(
+                name=s.name,
+                canonical_id=s.canonical_id,
+                category=s.category,
+            )
+            for s in result.extra_skills
+        ],
+        gap_report=result.gap_report,
+        reasoning=result.reasoning,
+    )
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -455,20 +444,47 @@ async def score_applications_for_job_service(
     if job.recruiter_id != recruiter_profile.id:
         raise AppException(ErrorCode.UNAUTHORIZED_ACCESS, "Not authorized")
 
+    now = datetime.now(timezone.utc)
+
+    # Limit concurrent Ollama calls to avoid overloading the local model server
+    semaphore = asyncio.Semaphore(2)
+
     # ── Platform applications (JSON resume data) ──────────────────────────────
     app_result = await db.execute(
         select(JobApplication).where(JobApplication.job_id == job_id)
     )
     applications = list(app_result.scalars().all())
 
-    scores: list[ApplicationScoreItem] = []
-    for app in applications:
-        resume_result = await db.execute(
-            select(Resume).where(Resume.id == app.resume_id)
+    # Pre-load resumes in one query
+    resume_ids = [a.resume_id for a in applications if a.resume_id]
+    resume_map: dict = {}
+    if resume_ids:
+        res_result = await db.execute(select(Resume).where(Resume.id.in_(resume_ids)))
+        for r in res_result.scalars().all():
+            resume_map[r.id] = r
+
+    async def _score_platform(app: JobApplication):
+        resume = resume_map.get(app.resume_id)
+        if not resume:
+            return ApplicationScoreItem(application_id=app.id, score=0, analysis=None)
+        async with semaphore:
+            pipeline_result = await run_pipeline(
+                jd_text=job.description,
+                resume_data=resume.resume_data,
+            )
+        analysis = _pipeline_result_to_analysis_schema(pipeline_result)
+        app.ai_score = pipeline_result.ats_score
+        app.ai_analysis = analysis.model_dump()
+        app.ai_scored_at = now
+        return ApplicationScoreItem(
+            application_id=app.id,
+            score=pipeline_result.ats_score,
+            analysis=analysis,
         )
-        resume = resume_result.scalar_one_or_none()
-        s = _score(job.description, resume.resume_data) if resume else 0
-        scores.append(ApplicationScoreItem(application_id=app.id, score=s))
+
+    scores: list[ApplicationScoreItem] = await asyncio.gather(
+        *[_score_platform(app) for app in applications]
+    )
 
     # ── External applications (uploaded PDF/DOCX files) ───────────────────────
     ext_result = await db.execute(
@@ -476,12 +492,29 @@ async def score_applications_for_job_service(
     )
     external_applications = list(ext_result.scalars().all())
 
-    external_scores: list[ExternalApplicationScoreItem] = []
-    for ext in external_applications:
+    async def _score_external(ext: ExternalApplication):
         text = await _extract_text_from_url(ext.resume_file_url, ext.resume_filename)
         if ext.notes:
             text = f"{text} {ext.notes}"
-        s = _score_text(job.description, text)
-        external_scores.append(ExternalApplicationScoreItem(external_application_id=ext.id, score=s))
+        async with semaphore:
+            pipeline_result = await run_pipeline(
+                jd_text=job.description,
+                resume_text=text if text.strip() else None,
+            )
+        analysis = _pipeline_result_to_analysis_schema(pipeline_result)
+        ext.ai_score = pipeline_result.ats_score
+        ext.ai_analysis = analysis.model_dump()
+        ext.ai_scored_at = now
+        return ExternalApplicationScoreItem(
+            external_application_id=ext.id,
+            score=pipeline_result.ats_score,
+            analysis=analysis,
+        )
 
-    return ApplicationScoresResponse(scores=scores, external_scores=external_scores)
+    external_scores: list[ExternalApplicationScoreItem] = await asyncio.gather(
+        *[_score_external(ext) for ext in external_applications]
+    )
+
+    await db.commit()
+
+    return ApplicationScoresResponse(scores=list(scores), external_scores=list(external_scores))

@@ -1,2 +1,11 @@
 .venv
 .env
+
+# Generated model files (too large for git — regenerate with stage2/stage3 scripts)
+models/
+stage2/models/
+stage2/data/
+stage3/models/
+stage3/data/
+**/__pycache__/
+**/*.pyc
