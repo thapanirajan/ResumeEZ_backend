@@ -122,9 +122,12 @@ async def delete_resume(
         db: AsyncSession = Depends(get_db),
         candidate: User = Depends(require_role(UserRole.JOB_SEEKER))
 ):
-    result = await resume_service.delete_resume(db, resume.id, candidate.candidate_profile.id)
+    if not candidate.candidate_profile:
+        raise AppException(ErrorCode.FORBIDDEN, "Candidate profile not found")
 
-    print(result)
+    result = await resume_service.delete_resume(db, resume.id, candidate.candidate_profile.id)
+    if not result:
+        raise AppException(ErrorCode.RESOURCE_NOT_FOUND, "Resume not found")
 
     return {
         "success": True,

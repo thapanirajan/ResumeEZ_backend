@@ -22,6 +22,19 @@ class ApplicationStatusUpdateSchema(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+class ApplicationNotesUpdateSchema(BaseModel):
+    recruiter_notes: Optional[str] = None
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class BulkStatusUpdateSchema(BaseModel):
+    application_ids: list[uuid.UUID]
+    status: ApplicationStatus
+
+    model_config = ConfigDict(extra="forbid")
+
+
 class ApplicationResponse(BaseModel):
     id: uuid.UUID
     job_id: uuid.UUID
@@ -45,6 +58,14 @@ class ApplicationDetailResponse(BaseModel):
     cover_letter: Optional[str]
     applied_at: datetime
     updated_at: datetime
+
+    # AI scoring fields
+    ai_score: Optional[int] = None
+    ai_analysis: Optional[dict] = None
+    ai_scored_at: Optional[datetime] = None
+
+    # Notes
+    recruiter_notes: Optional[str] = None
 
     # Joined fields (populated manually in service)
     candidate_name: Optional[str] = None
@@ -139,6 +160,7 @@ class RoadmapPhasesSchema(BaseModel):
 class SkillGapAnalysisResponse(BaseModel):
     analysis_id: str
     resume_id: str
+    roadmap_id: Optional[str] = None
     match_percentage: float
     total_jd_skills: int
     hard_skill_match: Optional[float] = None
@@ -149,6 +171,58 @@ class SkillGapAnalysisResponse(BaseModel):
     gap_report: str
     roadmap: RoadmapPhasesSchema
     ontology_version: str = "ollama-bge-v1"
+
+
+# ─── Skill Gap History & Roadmap Progress Schemas ─────────────────────────────
+
+class SkillGapReportListItem(BaseModel):
+    id: uuid.UUID
+    resume_id: uuid.UUID
+    resume_title: str
+    match_percentage: float
+    total_jd_skills: int
+    roadmap_id: Optional[uuid.UUID] = None
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class SkillGapReportDetail(BaseModel):
+    id: uuid.UUID
+    resume_id: uuid.UUID
+    resume_title: str
+    match_percentage: float
+    total_jd_skills: int
+    hard_skill_match: Optional[float] = None
+    soft_skill_match: Optional[float] = None
+    matched_skills: list[MatchedSkillItemSchema]
+    missing_skills: list[MissingSkillItemSchema]
+    extra_skills: list[ExtraSkillItemSchema]
+    gap_report: str
+    ontology_version: str
+    roadmap_id: Optional[uuid.UUID] = None
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class LearningRoadmapResponse(BaseModel):
+    id: uuid.UUID
+    report_id: uuid.UUID
+    phase_1_core: list[RoadmapSkillItemSchema]
+    phase_2_primary: list[RoadmapSkillItemSchema]
+    phase_3_advanced: list[RoadmapSkillItemSchema]
+    skill_progress: dict[str, str]  # canonical_id -> "not_started"|"in_progress"|"done"
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class RoadmapProgressUpdateSchema(BaseModel):
+    skill_progress: dict[str, str]
+
+    model_config = ConfigDict(extra="forbid")
 
 
 # ─── Schemas for get_job_with_applicants_service ──────────────────────────────

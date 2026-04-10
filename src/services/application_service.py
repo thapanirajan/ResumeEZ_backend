@@ -31,6 +31,10 @@ from src.schema.application_schema import (
     JobWithApplicantsSchema,
 )
 from src.services.ai_pipeline_service import run_pipeline, PipelineResult
+from src.utils.email_service import (
+    send_new_application_notification,
+    send_application_status_update,
+)
 from src.utils.error_code import ErrorCode
 from src.utils.exceptions import AppException
 
@@ -105,7 +109,87 @@ async def apply_to_job_service(
         raise AppException(ErrorCode.DUPLICATE_RESOURCE, "You have already applied to this job")
 
     await db.refresh(application)
+
+    # ── Background: run AI scoring ─────────────────────────────────────────────
+    asyncio.create_task(
+        _score_single_application_bg(
+            application_id=application.id,
+            job_description=job.description,
+            resume_data=resume.resume_data,
+        )
+    )
+
+    # ── Notify recruiter via email (fire-and-forget) ───────────────────────────
+    asyncio.create_task(
+        _notify_recruiter_new_application(
+            job_id=job.id,
+            candidate_name=candidate_profile.full_name or current_user.email,
+            job_title=job.title,
+            applied_at=application.applied_at.strftime("%Y-%m-%d %H:%M UTC"),
+        )
+    )
+
     return application
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Background helpers
+# ─────────────────────────────────────────────────────────────────────────────
+
+async def _score_single_application_bg(
+    application_id: uuid.UUID,
+    job_description: str,
+    resume_data: dict,
+) -> None:
+    """Run AI pipeline for a single application and persist the result."""
+    from src.config.db import AsyncSessionLocal  # noqa: avoid circular import at module level
+    try:
+        pipeline_result = await run_pipeline(jd_text=job_description, resume_data=resume_data)
+        analysis = _pipeline_result_to_analysis_schema(pipeline_result)
+        async with AsyncSessionLocal() as session:
+            result = await session.execute(
+                select(JobApplication).where(JobApplication.id == application_id)
+            )
+            app = result.scalar_one_or_none()
+            if app:
+                app.ai_score = pipeline_result.ats_score
+                app.ai_analysis = analysis.model_dump()
+                app.ai_scored_at = datetime.now(timezone.utc)
+                await session.commit()
+    except Exception as e:
+        print(f"[AUTO-SCORE] Failed for application {application_id}: {e}")
+
+
+async def _notify_recruiter_new_application(
+    job_id: uuid.UUID,
+    candidate_name: str,
+    job_title: str,
+    applied_at: str,
+) -> None:
+    """Look up recruiter email and send new-application notification."""
+    from src.config.db import AsyncSessionLocal  # noqa: avoid circular import at module level
+    try:
+        async with AsyncSessionLocal() as session:
+            job_result = await session.execute(select(Job).where(Job.id == job_id))
+            job = job_result.scalar_one_or_none()
+            if not job:
+                return
+            from src.models.recruiter_model import RecruiterProfile
+            recruiter_result = await session.execute(
+                select(RecruiterProfile).where(RecruiterProfile.id == job.recruiter_id)
+            )
+            recruiter = recruiter_result.scalar_one_or_none()
+            if not recruiter:
+                return
+            user_result = await session.execute(
+                select(User).where(User.id == recruiter.user_id)
+            )
+            user = user_result.scalar_one_or_none()
+            if not user or not user.email:
+                return
+        await send_new_application_notification(user.email, candidate_name, job_title, applied_at)
+    except Exception as e:
+        print(f"[EMAIL] Recruiter notification failed: {e}")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -216,6 +300,10 @@ async def get_applications_for_job_service(
                 cover_letter=app.cover_letter,
                 applied_at=app.applied_at,
                 updated_at=app.updated_at,
+                ai_score=app.ai_score,
+                ai_analysis=app.ai_analysis,
+                ai_scored_at=app.ai_scored_at,
+                recruiter_notes=app.recruiter_notes,
                 candidate_name=candidate.full_name,
                 candidate_email=candidate_email,
                 resume_title=resume.title if resume else None,
@@ -252,10 +340,59 @@ async def update_application_status_service(
     if job is None or job.recruiter_id != recruiter_profile.id:
         raise AppException(ErrorCode.UNAUTHORIZED_ACCESS, "You are not authorized to update this application")
 
+    old_status = application.status
     application.status = new_status
     await db.commit()
     await db.refresh(application)
+
+    # ── Notify candidate by email when status changes ─────────────────────────
+    if old_status != new_status:
+        asyncio.create_task(
+            _notify_candidate_status_change(
+                application_id=application.id,
+                job_title=job.title,
+                new_status=new_status.value,
+            )
+        )
+
     return application
+
+
+async def _notify_candidate_status_change(
+    application_id: uuid.UUID,
+    job_title: str,
+    new_status: str,
+) -> None:
+    """Look up candidate email and send status-change notification."""
+    from src.config.db import AsyncSessionLocal  # noqa: avoid circular import at module level
+    try:
+        async with AsyncSessionLocal() as session:
+            result = await session.execute(
+                select(JobApplication).where(JobApplication.id == application_id)
+            )
+            app = result.scalar_one_or_none()
+            if not app:
+                return
+            candidate_result = await session.execute(
+                select(CandidateProfile).where(CandidateProfile.id == app.candidate_id)
+            )
+            candidate = candidate_result.scalar_one_or_none()
+            if not candidate:
+                return
+            user_result = await session.execute(
+                select(User).where(User.id == candidate.user_id)
+            )
+            user = user_result.scalar_one_or_none()
+            if not user or not user.email:
+                return
+        await send_application_status_update(
+            candidate_email=user.email,
+            candidate_name=candidate.full_name or user.email,
+            job_title=job_title,
+            new_status=new_status,
+        )
+    except Exception as e:
+        print(f"[EMAIL] Candidate status notification failed: {e}")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -518,3 +655,83 @@ async def score_applications_for_job_service(
     await db.commit()
 
     return ApplicationScoresResponse(scores=list(scores), external_scores=list(external_scores))
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PATCH /api/applications/job/{job_id}/bulk-status  — Bulk status update
+# ─────────────────────────────────────────────────────────────────────────────
+async def bulk_update_application_status_service(
+    db: AsyncSession,
+    job_id: uuid.UUID,
+    application_ids: list[uuid.UUID],
+    new_status: ApplicationStatus,
+    current_user: User,
+) -> dict:
+    if current_user.role != UserRole.RECRUITER:
+        raise AppException(ErrorCode.FORBIDDEN, "Only recruiters can update application status")
+
+    recruiter_profile = _get_recruiter_profile(current_user)
+
+    job_result = await db.execute(select(Job).where(Job.id == job_id))
+    job = job_result.scalar_one_or_none()
+    if job is None:
+        raise AppException(ErrorCode.RESOURCE_NOT_FOUND, "Job not found")
+    if job.recruiter_id != recruiter_profile.id:
+        raise AppException(ErrorCode.UNAUTHORIZED_ACCESS, "Not authorized")
+
+    result = await db.execute(
+        select(JobApplication).where(
+            and_(
+                JobApplication.id.in_(application_ids),
+                JobApplication.job_id == job_id,
+            )
+        )
+    )
+    applications = list(result.scalars().all())
+
+    for app in applications:
+        old_status = app.status
+        app.status = new_status
+        if old_status != new_status:
+            asyncio.create_task(
+                _notify_candidate_status_change(
+                    application_id=app.id,
+                    job_title=job.title,
+                    new_status=new_status.value,
+                )
+            )
+
+    await db.commit()
+    return {"updated_count": len(applications), "status": new_status.value}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PATCH /api/applications/{application_id}/notes  — Recruiter adds notes
+# ─────────────────────────────────────────────────────────────────────────────
+async def update_application_notes_service(
+    db: AsyncSession,
+    application_id: uuid.UUID,
+    recruiter_notes: str | None,
+    current_user: User,
+) -> JobApplication:
+    if current_user.role != UserRole.RECRUITER:
+        raise AppException(ErrorCode.FORBIDDEN, "Only recruiters can add notes")
+
+    recruiter_profile = _get_recruiter_profile(current_user)
+
+    result = await db.execute(
+        select(JobApplication).where(JobApplication.id == application_id)
+    )
+    application = result.scalar_one_or_none()
+    if application is None:
+        raise AppException(ErrorCode.RESOURCE_NOT_FOUND, "Application not found")
+
+    job_result = await db.execute(select(Job).where(Job.id == application.job_id))
+    job = job_result.scalar_one_or_none()
+    if job is None or job.recruiter_id != recruiter_profile.id:
+        raise AppException(ErrorCode.UNAUTHORIZED_ACCESS, "Not authorized")
+
+    application.recruiter_notes = recruiter_notes
+    await db.commit()
+    await db.refresh(application)
+    return application

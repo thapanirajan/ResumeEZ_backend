@@ -25,6 +25,19 @@ class ExternalApplicationStatusUpdateSchema(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+class ExternalApplicationNotesUpdateSchema(BaseModel):
+    recruiter_notes: Optional[str] = None
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class ExternalBulkStatusUpdateSchema(BaseModel):
+    external_application_ids: list[uuid.UUID]
+    status: ExternalApplicationStatus
+
+    model_config = ConfigDict(extra="forbid")
+
+
 class ExternalApplicationResponse(BaseModel):
     id: uuid.UUID
     job_id: uuid.UUID
@@ -35,6 +48,10 @@ class ExternalApplicationResponse(BaseModel):
     resume_filename: str
     status: ExternalApplicationStatus
     notes: Optional[str]
+    recruiter_notes: Optional[str] = None
+    ai_score: Optional[int] = None
+    ai_analysis: Optional[dict] = None
+    ai_scored_at: Optional[datetime] = None
     uploaded_at: datetime
     updated_at: datetime
 

@@ -70,6 +70,14 @@ class CandidateProfileSchema(BaseModel):
 class RecruiterProfileSchema(BaseModel):
     username: Optional[str] = None
     full_name: Optional[str] = None
+    company_name: Optional[str] = None
+    company_logo: Optional[str] = None
+    company_website: Optional[str] = None
+    industry: Optional[str] = None
+    company_size: Optional[str] = None
+    company_description: Optional[str] = None
+    location: Optional[str] = None
+    is_verified_company: Optional[bool] = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -91,8 +99,17 @@ class UserProfileResponse(BaseModel):
 
 
 class UserProfileUpdateSchema(BaseModel):
+    # Candidate fields
     username: Optional[str] = None
     full_name: Optional[str] = None
     current_role: Optional[str] = None
     experience_years: Optional[int] = None
+    # Recruiter-specific fields
+    company_name: Optional[str] = None
+    company_logo: Optional[str] = None
+    company_website: Optional[str] = None
+    industry: Optional[str] = None
+    company_size: Optional[str] = None
+    company_description: Optional[str] = None
+    location: Optional[str] = None
 

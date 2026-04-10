@@ -6,6 +6,10 @@ models/
 stage2/models/
 stage2/data/
 stage3/models/
+stage4/
 stage3/data/
 **/__pycache__/
 **/*.pyc
+AI_PIPELINE.md
+*.md
+test_pipeline.py

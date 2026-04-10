@@ -13,3 +13,7 @@ from src.models.job_application_model import JobApplication
 
 from src.models.external_application_model import ExternalApplication
 
+from src.models.skill_gap_report_model import SkillGapReport
+
+from src.models.learning_roadmap_model import LearningRoadmap
+

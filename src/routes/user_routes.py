@@ -277,7 +277,11 @@ async def update_profile(
         if user.recruiter_profile is None:
             user.recruiter_profile = RecruiterProfile(user_id=user.id)
 
-        allowed_fields = {"username", "full_name"}
+        allowed_fields = {
+            "username", "full_name", "company_name", "company_logo",
+            "company_website", "industry", "company_size",
+            "company_description", "location",
+        }
         for field, value in update_data.items():
             if field in allowed_fields:
                 setattr(user.recruiter_profile, field, value)

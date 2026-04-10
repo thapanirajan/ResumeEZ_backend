@@ -1,3 +1,4 @@
+import asyncio
 import uuid
 from uuid import uuid4
 
@@ -87,7 +88,55 @@ async def upload_external_application_service(
     db.add(external_app)
     await db.commit()
     await db.refresh(external_app)
+
+    # Auto-score in background
+    asyncio.create_task(
+        _score_external_application_bg(
+            external_app_id=external_app.id,
+            job_description=job.description,
+            resume_url=resume_url,
+            resume_filename=original_filename,
+            notes=payload.notes,
+        )
+    )
+
     return external_app
+
+
+async def _score_external_application_bg(
+    external_app_id: uuid.UUID,
+    job_description: str,
+    resume_url: str,
+    resume_filename: str,
+    notes: str | None,
+) -> None:
+    """Download resume, run AI pipeline, persist scores."""
+    from src.config.db import AsyncSessionLocal
+    from datetime import datetime, timezone
+    from src.services.application_service import _extract_text_from_url, _pipeline_result_to_analysis_schema
+    from src.services.ai_pipeline_service import run_pipeline
+    try:
+        text = await _extract_text_from_url(resume_url, resume_filename)
+        if notes:
+            text = f"{text} {notes}"
+        pipeline_result = await run_pipeline(
+            jd_text=job_description,
+            resume_text=text if text.strip() else None,
+        )
+        from src.schema.application_schema import ApplicationAnalysisSchema
+        analysis = _pipeline_result_to_analysis_schema(pipeline_result)
+        async with AsyncSessionLocal() as session:
+            result = await session.execute(
+                select(ExternalApplication).where(ExternalApplication.id == external_app_id)
+            )
+            ext_app = result.scalar_one_or_none()
+            if ext_app:
+                ext_app.ai_score = pipeline_result.ats_score
+                ext_app.ai_analysis = analysis.model_dump()
+                ext_app.ai_scored_at = datetime.now(timezone.utc)
+                await session.commit()
+    except Exception as e:
+        print(f"[AUTO-SCORE] External application {external_app_id} failed: {e}")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -167,11 +216,21 @@ async def bulk_upload_external_applications_service(
                 success_idx += 1
         return BulkUploadResponse(results=results, uploaded_count=0, failed_count=len(results))
 
-    # Attach DB records to their corresponding result items
+    # Attach DB records to their corresponding result items and kick off auto-scoring
     app_iter = iter(new_apps)
     for r in results:
         if r.success:
-            r.data = ExternalApplicationResponse.model_validate(next(app_iter))
+            ext_app = next(app_iter)
+            r.data = ExternalApplicationResponse.model_validate(ext_app)
+            asyncio.create_task(
+                _score_external_application_bg(
+                    external_app_id=ext_app.id,
+                    job_description=job.description,
+                    resume_url=ext_app.resume_file_url,
+                    resume_filename=ext_app.resume_filename,
+                    notes=notes,
+                )
+            )
 
     uploaded = sum(1 for r in results if r.success)
     failed = len(results) - uploaded
@@ -237,3 +296,74 @@ async def update_external_application_status_service(
     await db.commit()
     await db.refresh(ext_app)
     return ext_app
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PATCH /api/applications/external/{external_id}/notes
+# ─────────────────────────────────────────────────────────────────────────────
+async def update_external_application_notes_service(
+    db: AsyncSession,
+    external_id: uuid.UUID,
+    recruiter_notes: str | None,
+    current_user: User,
+) -> ExternalApplication:
+    if current_user.role != UserRole.RECRUITER:
+        raise AppException(ErrorCode.FORBIDDEN, "Only recruiters can add notes")
+
+    recruiter_profile = _get_recruiter_profile(current_user)
+
+    result = await db.execute(
+        select(ExternalApplication).where(ExternalApplication.id == external_id)
+    )
+    ext_app = result.scalar_one_or_none()
+    if ext_app is None:
+        raise AppException(ErrorCode.RESOURCE_NOT_FOUND, "External application not found")
+
+    job_result = await db.execute(select(Job).where(Job.id == ext_app.job_id))
+    job = job_result.scalar_one_or_none()
+    if job is None or job.recruiter_id != recruiter_profile.id:
+        raise AppException(ErrorCode.UNAUTHORIZED_ACCESS, "Not authorized")
+
+    ext_app.recruiter_notes = recruiter_notes
+    await db.commit()
+    await db.refresh(ext_app)
+    return ext_app
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PATCH /api/applications/job/{job_id}/external/bulk-status
+# ─────────────────────────────────────────────────────────────────────────────
+async def bulk_update_external_status_service(
+    db: AsyncSession,
+    job_id: uuid.UUID,
+    external_application_ids: list[uuid.UUID],
+    new_status: ExternalApplicationStatus,
+    current_user: User,
+) -> dict:
+    if current_user.role != UserRole.RECRUITER:
+        raise AppException(ErrorCode.FORBIDDEN, "Only recruiters can update application status")
+
+    recruiter_profile = _get_recruiter_profile(current_user)
+
+    job_result = await db.execute(select(Job).where(Job.id == job_id))
+    job = job_result.scalar_one_or_none()
+    if job is None:
+        raise AppException(ErrorCode.RESOURCE_NOT_FOUND, "Job not found")
+    if job.recruiter_id != recruiter_profile.id:
+        raise AppException(ErrorCode.UNAUTHORIZED_ACCESS, "Not authorized")
+
+    from sqlalchemy import and_
+    result = await db.execute(
+        select(ExternalApplication).where(
+            and_(
+                ExternalApplication.id.in_(external_application_ids),
+                ExternalApplication.job_id == job_id,
+            )
+        )
+    )
+    applications = list(result.scalars().all())
+    for app in applications:
+        app.status = new_status
+
+    await db.commit()
+    return {"updated_count": len(applications), "status": new_status.value}

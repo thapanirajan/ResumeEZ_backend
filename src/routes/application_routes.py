@@ -17,12 +17,16 @@ from src.schema.application_schema import (
     ApplicationResumeResponse,
     ApplicationScoresResponse,
     ApplicationStatusUpdateSchema,
+    ApplicationNotesUpdateSchema,
+    BulkStatusUpdateSchema,
     JobWithApplicantsSchema,
 )
 from src.schema.external_application_schema import (
     ExternalApplicationCreateSchema,
     ExternalApplicationResponse,
     ExternalApplicationStatusUpdateSchema,
+    ExternalApplicationNotesUpdateSchema,
+    ExternalBulkStatusUpdateSchema,
     BulkUploadResponse,
 )
 from src.services.application_service import (
@@ -34,12 +38,16 @@ from src.services.application_service import (
     get_job_with_applicants_service,
     get_application_resume_service,
     score_applications_for_job_service,
+    bulk_update_application_status_service,
+    update_application_notes_service,
 )
 from src.services.external_application_service import (
     upload_external_application_service,
     bulk_upload_external_applications_service,
     get_external_applications_service,
     update_external_application_status_service,
+    update_external_application_notes_service,
+    bulk_update_external_status_service,
 )
 
 application_router = APIRouter(tags=["Applications"])
@@ -236,4 +244,68 @@ async def bulk_upload_external_resumes(
 
     return await bulk_upload_external_applications_service(
         db, job_id, files, names, source, notes, current_user
+    )
+
+
+# ─── PATCH /api/applications/job/{job_id}/bulk-status ────────────────────────
+@application_router.patch(
+    "/job/{job_id}/bulk-status",
+    status_code=status.HTTP_200_OK,
+)
+async def bulk_update_status(
+    job_id: uuid.UUID,
+    payload: BulkStatusUpdateSchema,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return await bulk_update_application_status_service(
+        db, job_id, payload.application_ids, payload.status, current_user
+    )
+
+
+# ─── PATCH /api/applications/job/{job_id}/external/bulk-status ───────────────
+@application_router.patch(
+    "/job/{job_id}/external/bulk-status",
+    status_code=status.HTTP_200_OK,
+)
+async def bulk_update_external_status(
+    job_id: uuid.UUID,
+    payload: ExternalBulkStatusUpdateSchema,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return await bulk_update_external_status_service(
+        db, job_id, payload.external_application_ids, payload.status, current_user
+    )
+
+
+# ─── PATCH /api/applications/{application_id}/notes ──────────────────────────
+@application_router.patch(
+    "/{application_id}/notes",
+    response_model=ApplicationDetailResponse,
+)
+async def update_application_notes(
+    application_id: uuid.UUID,
+    payload: ApplicationNotesUpdateSchema,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return await update_application_notes_service(
+        db, application_id, payload.recruiter_notes, current_user
+    )
+
+
+# ─── PATCH /api/applications/external/{external_id}/notes ────────────────────
+@application_router.patch(
+    "/external/{external_id}/notes",
+    response_model=ExternalApplicationResponse,
+)
+async def update_external_application_notes(
+    external_id: uuid.UUID,
+    payload: ExternalApplicationNotesUpdateSchema,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return await update_external_application_notes_service(
+        db, external_id, payload.recruiter_notes, current_user
     )
