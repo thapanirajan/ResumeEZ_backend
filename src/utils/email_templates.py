@@ -149,6 +149,58 @@ def application_status_update_template(candidate_name: str, job_title: str, new_
     """
 
 
+def shortlist_notification_template(candidate_name: str, job_title: str, company_name: str) -> str:
+    return f"""
+    <div style="
+        max-width: 480px;
+        margin: 0 auto;
+        padding: 24px;
+        font-family: Arial, Helvetica, sans-serif;
+        background-color: #ffffff;
+        border: 1px solid #e5e7eb;
+        border-radius: 6px;
+    ">
+        <div style="
+            background-color: #f0fdf4;
+            border-left: 4px solid #10b981;
+            border-radius: 4px;
+            padding: 12px 16px;
+            margin-bottom: 20px;
+        ">
+            <p style="color: #065f46; font-size: 13px; font-weight: bold; margin: 0;">
+                You have been shortlisted!
+            </p>
+        </div>
+
+        <h2 style="color: #111827; font-size: 18px; margin-bottom: 12px;">
+            Congratulations, {candidate_name}!
+        </h2>
+
+        <p style="color: #374151; font-size: 14px; margin-bottom: 16px;">
+            We are pleased to inform you that you have been selected for the final shortlist for the following position:
+        </p>
+
+        <div style="
+            padding: 12px 16px;
+            background-color: #f9fafb;
+            border-left: 4px solid #6366f1;
+            border-radius: 4px;
+            margin-bottom: 20px;
+        ">
+            <p style="color: #111827; font-size: 16px; font-weight: bold; margin: 0;">{job_title}</p>
+            <p style="color: #6b7280; font-size: 12px; margin: 4px 0 0 0;">{company_name}</p>
+        </div>
+
+        <p style="color: #374151; font-size: 14px; margin-bottom: 20px;">
+            The recruiter will be in touch with next steps. Please ensure your contact details are up to date
+            on your ResumeEZ profile.
+        </p>
+
+        <p style="color: #9ca3af; font-size: 12px;">ResumeEZ Team</p>
+    </div>
+    """
+
+
 def password_reset_email_template(token: str) -> str:
     return f"""
     <div style="

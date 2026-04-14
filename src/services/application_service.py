@@ -34,6 +34,7 @@ from src.services.ai_pipeline_service import run_pipeline, PipelineResult
 from src.utils.email_service import (
     send_new_application_notification,
     send_application_status_update,
+    send_shortlist_notification,
 )
 from src.utils.error_code import ErrorCode
 from src.utils.exceptions import AppException
@@ -703,6 +704,157 @@ async def bulk_update_application_status_service(
 
     await db.commit()
     return {"updated_count": len(applications), "status": new_status.value}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# POST /api/applications/job/{job_id}/notify-shortlisted
+# Recruiter confirms the final shortlist and triggers all notifications.
+# ─────────────────────────────────────────────────────────────────────────────
+async def notify_shortlisted_candidates_service(
+    db: AsyncSession,
+    job_id: uuid.UUID,
+    application_ids: list[uuid.UUID],
+    current_user: User,
+) -> dict:
+    """
+    Called ONCE when the recruiter clicks "Confirm & Send Notifications".
+
+    For each shortlisted platform application:
+      - Creates an in-app notification for the job seeker
+      - Sends a shortlist email to the job seeker
+
+    For the recruiter:
+      - Creates a single in-app confirmation notification
+      - No email is sent to the recruiter
+
+    Returns a summary dict.
+    """
+    if current_user.role != UserRole.RECRUITER:
+        raise AppException(ErrorCode.FORBIDDEN, "Only recruiters can send shortlist notifications")
+
+    recruiter_profile = _get_recruiter_profile(current_user)
+
+    # Verify the job belongs to this recruiter
+    job_result = await db.execute(select(Job).where(Job.id == job_id))
+    job = job_result.scalar_one_or_none()
+    if job is None:
+        raise AppException(ErrorCode.RESOURCE_NOT_FOUND, "Job not found")
+    if job.recruiter_id != recruiter_profile.id:
+        raise AppException(ErrorCode.UNAUTHORIZED_ACCESS, "Not authorized")
+
+    # Load the specified applications (must belong to this job)
+    app_result = await db.execute(
+        select(JobApplication).where(
+            and_(
+                JobApplication.id.in_(application_ids),
+                JobApplication.job_id == job_id,
+            )
+        )
+    )
+    applications = list(app_result.scalars().all())
+
+    company_name = recruiter_profile.company_name or "the recruiting company"
+
+    # Fire background tasks for candidate notifications (non-blocking)
+    for app in applications:
+        asyncio.create_task(
+            _notify_candidate_shortlisted(
+                application_id=app.id,
+                job_id=job_id,
+                job_title=job.title,
+                company_name=company_name,
+            )
+        )
+
+    # Create in-app confirmation notification for the recruiter (synchronous — lightweight)
+    from src.services.notification_service import create_notification
+    from src.models.notification_model import NotificationType
+
+    notified_count = len(applications)
+    await create_notification(
+        db=db,
+        user_id=current_user.id,
+        type=NotificationType.SHORTLIST_SENT_CONFIRMATION,
+        title="Shortlist notifications sent",
+        message=(
+            f"You have successfully notified {notified_count} candidate"
+            f"{'s' if notified_count != 1 else ''} for '{job.title}'."
+        ),
+        job_id=job_id,
+    )
+    await db.commit()
+
+    return {
+        "notified_count": notified_count,
+        "job_title": job.title,
+    }
+
+
+async def _notify_candidate_shortlisted(
+    application_id: uuid.UUID,
+    job_id: uuid.UUID,
+    job_title: str,
+    company_name: str,
+) -> None:
+    """
+    Background task:
+    - Creates an in-app notification for the job seeker
+    - Sends a shortlist email to the job seeker
+    """
+    from src.config.db import AsyncSessionLocal  # noqa: avoid circular import
+    from src.services.notification_service import create_notification
+    from src.models.notification_model import NotificationType
+
+    try:
+        async with AsyncSessionLocal() as session:
+            app_result = await session.execute(
+                select(JobApplication).where(JobApplication.id == application_id)
+            )
+            app = app_result.scalar_one_or_none()
+            if not app:
+                return
+
+            candidate_result = await session.execute(
+                select(CandidateProfile).where(CandidateProfile.id == app.candidate_id)
+            )
+            candidate = candidate_result.scalar_one_or_none()
+            if not candidate:
+                return
+
+            user_result = await session.execute(
+                select(User).where(User.id == candidate.user_id)
+            )
+            user = user_result.scalar_one_or_none()
+            if not user:
+                return
+
+            candidate_name = candidate.full_name or user.email
+
+            # In-app notification for job seeker
+            await create_notification(
+                db=session,
+                user_id=user.id,
+                type=NotificationType.SHORTLIST_RESULT,
+                title=f"You've been shortlisted for {job_title}!",
+                message=(
+                    f"Congratulations! {company_name} has included you in their final shortlist "
+                    f"for the position of '{job_title}'. The recruiter will be in touch soon."
+                ),
+                job_id=job_id,
+            )
+            await session.commit()
+
+        # Email notification (outside the session to avoid holding the connection)
+        if user.email:
+            await send_shortlist_notification(
+                candidate_email=user.email,
+                candidate_name=candidate_name,
+                job_title=job_title,
+                company_name=company_name,
+            )
+
+    except Exception as e:
+        print(f"[SHORTLIST-NOTIFY] Failed for application {application_id}: {e}")
 
 
 # ─────────────────────────────────────────────────────────────────────────────

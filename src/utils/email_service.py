@@ -5,6 +5,7 @@ from src.utils.email_templates import (
     verification_email_template,
     new_application_notification_template,
     application_status_update_template,
+    shortlist_notification_template,
 )
 
 RESEND_FROM = "ResumeEZ <onboarding@resend.dev>"
@@ -57,6 +58,19 @@ async def send_new_application_notification(
         to=recruiter_email,
         subject=f"New application from {candidate_name} — {job_title}",
         html=new_application_notification_template(candidate_name, job_title, applied_at),
+    )
+
+
+async def send_shortlist_notification(
+    candidate_email: str,
+    candidate_name: str,
+    job_title: str,
+    company_name: str,
+) -> None:
+    await _send_email(
+        to=candidate_email,
+        subject=f"You've been shortlisted for {job_title}!",
+        html=shortlist_notification_template(candidate_name, job_title, company_name),
     )
 
 

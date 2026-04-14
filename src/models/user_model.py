@@ -12,6 +12,7 @@ from src.config.base import Base
 if TYPE_CHECKING:
     from src.models.recruiter_model import RecruiterProfile
     from src.models.candidate_profile_model import CandidateProfile
+    from src.models.notification_model import Notification
 
 
 class UserRole(enum.Enum):
@@ -71,4 +72,10 @@ class User(Base):
         back_populates="user",
         uselist=False,
         cascade="all, delete-orphan"
+    )
+
+    notifications: Mapped[list["Notification"]] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",
+        order_by="Notification.created_at.desc()",
     )

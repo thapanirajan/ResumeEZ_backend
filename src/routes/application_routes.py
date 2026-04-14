@@ -19,6 +19,7 @@ from src.schema.application_schema import (
     ApplicationStatusUpdateSchema,
     ApplicationNotesUpdateSchema,
     BulkStatusUpdateSchema,
+    NotifyShortlistedSchema,
     JobWithApplicantsSchema,
 )
 from src.schema.external_application_schema import (
@@ -40,6 +41,7 @@ from src.services.application_service import (
     score_applications_for_job_service,
     bulk_update_application_status_service,
     update_application_notes_service,
+    notify_shortlisted_candidates_service,
 )
 from src.services.external_application_service import (
     upload_external_application_service,
@@ -276,6 +278,23 @@ async def bulk_update_external_status(
 ):
     return await bulk_update_external_status_service(
         db, job_id, payload.external_application_ids, payload.status, current_user
+    )
+
+
+# ─── POST /api/applications/job/{job_id}/notify-shortlisted ──────────────────
+# Recruiter triggers final shortlist notifications (one-time confirmed action).
+@application_router.post(
+    "/job/{job_id}/notify-shortlisted",
+    status_code=status.HTTP_200_OK,
+)
+async def notify_shortlisted_candidates(
+    job_id: uuid.UUID,
+    payload: NotifyShortlistedSchema,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return await notify_shortlisted_candidates_service(
+        db, job_id, payload.application_ids, current_user
     )
 
 

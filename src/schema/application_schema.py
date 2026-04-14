@@ -35,6 +35,13 @@ class BulkStatusUpdateSchema(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+class NotifyShortlistedSchema(BaseModel):
+    """Payload for the final 'Notify Job Seekers' action."""
+    application_ids: list[uuid.UUID]
+
+    model_config = ConfigDict(extra="forbid")
+
+
 class ApplicationResponse(BaseModel):
     id: uuid.UUID
     job_id: uuid.UUID

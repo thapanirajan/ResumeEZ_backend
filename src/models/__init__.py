@@ -17,3 +17,5 @@ from src.models.skill_gap_report_model import SkillGapReport
 
 from src.models.learning_roadmap_model import LearningRoadmap
 
+from src.models.notification_model import Notification
+
