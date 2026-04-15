@@ -271,7 +271,10 @@ async def update_profile(
         if user.candidate_profile is None:
             user.candidate_profile = CandidateProfile(user_id=user.id)
 
-        allowed_fields = {"username", "full_name", "current_role", "experience_years"}
+        allowed_fields = {
+            "username", "full_name", "current_role", "experience_years",
+            "bio", "location", "skills", "is_public",
+        }
         for field, value in update_data.items():
             if field in allowed_fields:
                 setattr(user.candidate_profile, field, value)

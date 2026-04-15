@@ -63,6 +63,11 @@ class CandidateProfileSchema(BaseModel):
     full_name: Optional[str] = None
     current_role: Optional[str] = None
     experience_years: Optional[int] = None
+    bio: Optional[str] = None
+    location: Optional[str] = None
+    skills: Optional[list] = None
+    is_profile_complete: Optional[bool] = None
+    is_public: Optional[bool] = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -99,17 +104,21 @@ class UserProfileResponse(BaseModel):
 
 
 class UserProfileUpdateSchema(BaseModel):
-    # Candidate fields
+    # Shared
     username: Optional[str] = None
     full_name: Optional[str] = None
+    location: Optional[str] = None
+    # Candidate-only
     current_role: Optional[str] = None
     experience_years: Optional[int] = None
-    # Recruiter-specific fields
+    bio: Optional[str] = None
+    skills: Optional[list] = None
+    is_public: Optional[bool] = None
+    # Recruiter-only
     company_name: Optional[str] = None
     company_logo: Optional[str] = None
     company_website: Optional[str] = None
     industry: Optional[str] = None
     company_size: Optional[str] = None
     company_description: Optional[str] = None
-    location: Optional[str] = None
 
