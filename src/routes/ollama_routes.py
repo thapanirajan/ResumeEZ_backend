@@ -1,10 +1,9 @@
-
-
 from fastapi import APIRouter
 from pydantic import BaseModel
-from src.services.ollama_service import call_ollama
+from src.services.groq_service import rewrite_summary
 
-ollama_router = APIRouter(tags=["ollama"])
+ollama_router = APIRouter(tags=["AI"])
+
 
 class AIRequest(BaseModel):
     prompt: str
@@ -12,5 +11,5 @@ class AIRequest(BaseModel):
 
 @ollama_router.post("/generate")
 async def generate_text(request: AIRequest):
-    response = await call_ollama(request.prompt)
+    response = await rewrite_summary(request.prompt)
     return {"result": response}

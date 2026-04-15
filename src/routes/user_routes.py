@@ -121,7 +121,8 @@ async def verify_login(data: PasswordlessLoginVerify, response: Response, db: As
         token = create_jwt_token(
             data={
                 "sub": str(user.id),
-                "email": user.email
+                "email": user.email,
+                "role": user.role.value if user.role else None,
             },
             expires_delta=ACCESS_TOKEN_EXPIRE_DELTA
         )
@@ -198,7 +199,8 @@ async def google_oauth_callback(code: str, db: AsyncSession = Depends(get_db)):
     token = create_jwt_token(
         data={
             "sub": str(user.id),
-            "email": user.email
+            "email": user.email,
+            "role": user.role.value if user.role else None,
         },
         expires_delta=ACCESS_TOKEN_EXPIRE_DELTA
     )
@@ -297,7 +299,7 @@ async def update_profile(
 
 
 @user_router.patch("/auth/set-role", response_model=SetRoleResponse)
-async def set_user_role(data: SetUserRoleSchema, current_user: User = Depends(get_current_user),
+async def set_user_role(response: Response, data: SetUserRoleSchema, current_user: User = Depends(get_current_user),
                         db: AsyncSession = Depends(get_db)):
     if current_user.role is not None:
         raise AppException(
@@ -318,6 +320,17 @@ async def set_user_role(data: SetUserRoleSchema, current_user: User = Depends(ge
         db.add(recruiter)
 
     await db.commit()
+
+    # Re-issue JWT with role included so middleware can read it
+    token = create_jwt_token(
+        data={
+            "sub": str(current_user.id),
+            "email": current_user.email,
+            "role": data.role.value,
+        },
+        expires_delta=ACCESS_TOKEN_EXPIRE_DELTA
+    )
+    issue_auth_cookie(response, token)
 
     return SetRoleResponse(
         success=True,

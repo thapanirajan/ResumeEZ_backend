@@ -17,13 +17,8 @@ import uuid
 from dataclasses import dataclass, field
 from typing import Any
 
-import httpx
 from rapidfuzz import fuzz
-
-# ─── Ollama config (reuse pattern from ollama_service.py) ─────────────────────
-_OLLAMA_BASE = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
-_OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen3:8b")
-_OLLAMA_TIMEOUT = 120.0
+from src.services.groq_service import call_groq
 
 # ─── BGE model singleton (lazy load) ──────────────────────────────────────────
 _bge_model = None
@@ -486,19 +481,15 @@ def _apply_alternative_groups(
     return matched, new_missing, max(total, 0), max(hard_total, 0), max(soft_total, 0)
 
 
-# ─── Ollama helper ────────────────────────────────────────────────────────────
+# ─── Groq helper ──────────────────────────────────────────────────────────────
 
 async def _call_ollama(prompt: str) -> str:
-    """Call Ollama and return raw text response."""
+    """Call Groq and return raw text response (drop-in replacement for Ollama)."""
     try:
-        async with httpx.AsyncClient(timeout=_OLLAMA_TIMEOUT) as client:
-            response = await client.post(
-                f"{_OLLAMA_BASE}/api/generate",
-                json={"model": _OLLAMA_MODEL,
-                      "prompt": prompt, "stream": False},
-            )
-            response.raise_for_status()
-            return response.json().get("response", "")
+        return await call_groq(
+            prompt,
+            system_prompt="You are an expert resume and job description analyzer. Follow the instructions exactly and return only what is asked."
+        )
     except Exception:
         return ""
 
