@@ -1,4 +1,7 @@
-import httpx
+import asyncio
+import smtplib
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 
 from src.config.env_config import ENV_CONFIG
 from src.utils.email_templates import (
@@ -8,44 +11,45 @@ from src.utils.email_templates import (
     shortlist_notification_template,
 )
 
-RESEND_FROM = "ResumeEZ <onboarding@resend.dev>"
+_SMTP_HOST = "smtp.gmail.com"
+_SMTP_PORT = 587
+_FROM_NAME = "ResumeEZ"
+
+
+def _send_email_sync(to: str, subject: str, html: str) -> None:
+    """Blocking SMTP send — called via run_in_executor so it never blocks the event loop."""
+    msg = MIMEMultipart("alternative")
+    msg["Subject"] = subject
+    msg["From"] = f"{_FROM_NAME} <{ENV_CONFIG.APP_EMAIL}>"
+    msg["To"] = to
+    msg.attach(MIMEText(html, "html"))
+
+    with smtplib.SMTP(_SMTP_HOST, _SMTP_PORT) as server:
+        server.ehlo()
+        server.starttls()
+        server.login(ENV_CONFIG.APP_EMAIL, ENV_CONFIG.APP_PASS)
+        server.sendmail(ENV_CONFIG.APP_EMAIL, to, msg.as_string())
 
 
 async def _send_email(to: str, subject: str, html: str) -> None:
-    """Low-level helper — fire and forget, swallows errors so pipeline is never blocked."""
+    """Async wrapper — fire and forget, swallows errors so the pipeline is never blocked."""
     try:
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
-                "https://api.resend.com/emails",
-                headers={
-                    "Authorization": f"Bearer {ENV_CONFIG.RESEND_API_KEY}",
-                    "Content-Type": "application/json",
-                },
-                json={"from": RESEND_FROM, "to": [to], "subject": subject, "html": html},
-                timeout=10.0,
-            )
-            response.raise_for_status()
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(None, _send_email_sync, to, subject, html)
     except Exception as e:
         print(f"[EMAIL] Failed to send to {to}: {e}")
 
 
-async def send_verification_email(email: str, token: str):
-    async with httpx.AsyncClient() as client:
-        response = await client.post(
-            "https://api.resend.com/emails",
-            headers={
-                "Authorization": f"Bearer {ENV_CONFIG.RESEND_API_KEY}",
-                "Content-Type": "application/json",
-            },
-            json={
-                "from": RESEND_FROM,
-                "to": [email],
-                "subject": "Verify your ResumeEZ account",
-                "html": verification_email_template(token),
-            },
-            timeout=10.0,
-        )
-        response.raise_for_status()
+async def send_verification_email(email: str, token: str) -> None:
+    """Send account verification email — raises on failure (intentional, used during signup)."""
+    loop = asyncio.get_event_loop()
+    await loop.run_in_executor(
+        None,
+        _send_email_sync,
+        email,
+        "Verify your ResumeEZ account",
+        verification_email_template(token),
+    )
 
 
 async def send_new_application_notification(

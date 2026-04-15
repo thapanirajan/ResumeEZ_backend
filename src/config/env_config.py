@@ -20,6 +20,8 @@ class Env:
     GOOGLE_CLIENT_REDIRECT_URI: str
     ACCESS_TOKEN_EXPIRE_DAYS: int
     RESEND_API_KEY: str
+    APP_EMAIL: str
+    APP_PASS: str
 
 
 # Determine base URL dynamically
@@ -47,7 +49,9 @@ ENV_CONFIG = Env(
     GOOGLE_CLIENT_SECRET=os.getenv("GOOGLE_CLIENT_SECRET"),
     GOOGLE_CLIENT_REDIRECT_URI=GOOGLE_CLIENT_REDIRECT_URI,
     ACCESS_TOKEN_EXPIRE_DAYS=int(os.getenv("ACCESS_TOKEN_EXPIRE_DAYS", 30)),
-    RESEND_API_KEY=os.getenv("RESEND_API_KEY")
+    RESEND_API_KEY=os.getenv("RESEND_API_KEY", ""),
+    APP_EMAIL=os.getenv("APP_EMAIL", ""),
+    APP_PASS=os.getenv("APP_PASS", ""),
 )
 
 # Fail fast
