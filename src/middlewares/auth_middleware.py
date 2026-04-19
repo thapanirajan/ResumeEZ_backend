@@ -1,6 +1,7 @@
 from uuid import UUID
 
-from fastapi import Depends
+from fastapi import Depends, Request, Security
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.config.db import get_db
@@ -9,7 +10,22 @@ from src.services.user_services import get_user_by_id_service
 from src.utils.error_code import ErrorCode
 from src.utils.jwt_utils import decode_jwt_token
 from src.utils.exceptions import AppException
-from fastapi import Request
+
+_bearer_scheme = HTTPBearer(auto_error=False)
+
+
+def _extract_token_from_request(
+    req: Request,
+    credentials: HTTPAuthorizationCredentials | None,
+) -> str | None:
+    if credentials and credentials.scheme.lower() == "bearer" and credentials.credentials:
+        return credentials.credentials.strip()
+
+    token = req.cookies.get("token")
+    if token:
+        return token.strip()
+
+    return None
 
 
 # role checker
@@ -28,15 +44,10 @@ def require_role(required_role: UserRole):
 # authenticate
 async def get_current_user(
         req: Request,
+        credentials: HTTPAuthorizationCredentials | None = Security(_bearer_scheme),
         db: AsyncSession = Depends(get_db)
 ) -> User:
-    token = req.cookies.get("token")
-
-    # Fallback to Authorization header if cookie is missing
-    if not token:
-        auth_header = req.headers.get("Authorization")
-        if auth_header and auth_header.startswith("Bearer "):
-            token = auth_header.split(" ")[1]
+    token = _extract_token_from_request(req, credentials)
 
     if not token:
         raise AppException(
@@ -44,12 +55,7 @@ async def get_current_user(
             "Not authenticated"
         )
 
-    print("---------jwt token-------------")
-    print(token)
-
     payload = decode_jwt_token(token)
-
-    print(payload)
 
     user_id: str | None = payload.get("sub")
 

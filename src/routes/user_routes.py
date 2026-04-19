@@ -65,10 +65,16 @@ async def authenticate(data: PasswordlessLoginRequest, db: AsyncSession = Depend
         db.add(user)
 
     user.otp_code = hashed_otp
-    user.expires_at = datetime.now() + timedelta(minutes=5)
+    user.expires_at = datetime.now(timezone.utc) + timedelta(minutes=5)
     await db.commit()
 
-    await send_verification_email(str(user.email), otp)
+    try:
+        await send_verification_email(str(user.email), otp)
+    except Exception:
+        raise AppException(
+            ErrorCode.EXTERNAL_SERVICE_ERROR,
+            "Unable to send OTP email. Please use a valid email and try again.",
+        )
 
     return PasswordlessLoginResponse(
         success=True,
@@ -78,70 +84,62 @@ async def authenticate(data: PasswordlessLoginRequest, db: AsyncSession = Depend
 
 @user_router.post("/auth/verify", response_model=LoginResponse)
 async def verify_login(data: PasswordlessLoginVerify, response: Response, db: AsyncSession = Depends(get_db)):
-    try:
-        print("---------Payload from frontend-------")
-        print(data)
-        user = await get_user_by_email(db, data.email)
+    user = await get_user_by_email(db, data.email)
 
-        if not user:
-            raise AppException(
-                ErrorCode.USER_NOT_FOUND,
-                "User not found"
-            )
-
-        # otp exists
-        if not user.otp_code or not user.expires_at:
-            raise AppException(
-                ErrorCode.OTP_EXPIRED,
-                "OTP Expired"
-            )
-
-        # check otp expiry
-        if user.expires_at < datetime.now(timezone.utc):
-            raise AppException(
-                ErrorCode.OTP_EXPIRED,
-                "OTP Expired"
-            )
-
-        # verify otp
-        if not verify_otp(data.otp_code, user.otp_code):
-            raise AppException(
-                ErrorCode.OTP_EXPIRED,
-                "OTP Expired"
-            )
-
-        # success
-        user.otp_code = None
-        user.expires_at = None
-        user.is_verified = True
-
-        await db.commit()
-
-        # create jwt tokens
-        token = create_jwt_token(
-            data={
-                "sub": str(user.id),
-                "email": user.email,
-                "role": user.role.value if user.role else None,
-            },
-            expires_delta=ACCESS_TOKEN_EXPIRE_DELTA
+    if not user:
+        raise AppException(
+            ErrorCode.USER_NOT_FOUND,
+            "User not found"
         )
-        print("-----Token----------")
-        print(token)
 
-        issue_auth_cookie(response, token)
-
-        return LoginResponse(
-            success=True,
-            message="Successfully logged in",
-            data=LoginResponseData(
-                id=str(user.id),
-                email=user.email
-            )
+    # otp exists
+    if not user.otp_code or not user.expires_at:
+        raise AppException(
+            ErrorCode.OTP_EXPIRED,
+            "OTP Expired"
         )
-    
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+
+    # check otp expiry
+    if user.expires_at < datetime.now(timezone.utc):
+        raise AppException(
+            ErrorCode.OTP_EXPIRED,
+            "OTP Expired"
+        )
+
+    # verify otp
+    if not verify_otp(data.otp_code, user.otp_code):
+        raise AppException(
+            ErrorCode.OTP_EXPIRED,
+            "OTP Expired"
+        )
+
+    # success
+    user.otp_code = None
+    user.expires_at = None
+    user.is_verified = True
+
+    await db.commit()
+
+    # create jwt tokens
+    token = create_jwt_token(
+        data={
+            "sub": str(user.id),
+            "email": user.email,
+            "role": user.role.value if user.role else None,
+        },
+        expires_delta=ACCESS_TOKEN_EXPIRE_DELTA
+    )
+
+    issue_auth_cookie(response, token)
+
+    return LoginResponse(
+        success=True,
+        message="Successfully logged in",
+        data=LoginResponseData(
+            id=str(user.id),
+            email=user.email
+        )
+    )
 
 
 @user_router.get("/auth/google/login")

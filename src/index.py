@@ -17,6 +17,8 @@ from src.routes.user_routes import user_router
 from src.routes.upload_routes import upload_router
 from src.utils.exceptions import AppException
 from src.utils.error_handler import app_exception_handler
+from src.utils.error_handler import validation_exception_handler
+from fastapi.exceptions import RequestValidationError
 
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
@@ -49,6 +51,7 @@ app.add_middleware(
 
 # handles custom error
 app.add_exception_handler(AppException, app_exception_handler)
+app.add_exception_handler(RequestValidationError, validation_exception_handler)
 
 
 @app.get("/")

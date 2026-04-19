@@ -1,7 +1,7 @@
 from typing import Optional
 from uuid import UUID
 
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, EmailStr
 
 from src.models.user_model import UserRole
 
@@ -13,7 +13,7 @@ class UpdateUserSchema(BaseModel):
 
 # login
 class PasswordlessLoginRequest(BaseModel):
-    email: str = Field(
+    email: EmailStr = Field(
         min_length=1,
         max_length=50,
         examples=["thapanirajan789@gmail.com"]
