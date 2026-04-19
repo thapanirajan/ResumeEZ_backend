@@ -54,11 +54,22 @@ class ResumeService:
             resume_id: UUID,
             candidate_id: UUID,
     ) -> Resume | None:
+        resume = await self.get_resume_by_id_unscoped(db=db, resume_id=resume_id)
+        if resume is None:
+            return None
+        if resume.candidate_id != candidate_id:
+            return None
+        return resume
+
+    async def get_resume_by_id_unscoped(
+            self,
+            db: AsyncSession,
+            resume_id: UUID,
+    ) -> Resume | None:
         stmt = (
             select(Resume)
             .where(
                 Resume.id == resume_id,
-                Resume.candidate_id == candidate_id,
             )
         )
 

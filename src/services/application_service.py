@@ -82,6 +82,16 @@ async def apply_to_job_service(
     if job.status != JobStatus.OPEN:
         raise AppException(ErrorCode.INVALID_INPUT, "This job is not accepting applications")
 
+    # Prevent duplicate application even if DB constraint is missing/outdated
+    existing_result = await db.execute(
+        select(JobApplication.id).where(
+            JobApplication.job_id == payload.job_id,
+            JobApplication.candidate_id == candidate_profile.id,
+        ).limit(1)
+    )
+    if existing_result.scalar_one_or_none() is not None:
+        raise AppException(ErrorCode.DUPLICATE_RESOURCE, "You have already applied to this job")
+
     # Verify resume belongs to this candidate
     resume_result = await db.execute(
         select(Resume).where(
@@ -129,6 +139,9 @@ async def apply_to_job_service(
             applied_at=application.applied_at.strftime("%Y-%m-%d %H:%M UTC"),
         )
     )
+    
+    # --- Notify candidates via in app notification ---------------------
+    
 
     return application
 
@@ -744,33 +757,57 @@ async def notify_shortlisted_candidates_service(
 
     # Load the specified applications (must belong to this job)
     app_result = await db.execute(
-        select(JobApplication).where(
+        select(JobApplication)
+        .where(
             and_(
                 JobApplication.id.in_(application_ids),
                 JobApplication.job_id == job_id,
             )
+        )
+        .options(
+            selectinload(JobApplication.candidate).selectinload(CandidateProfile.user),
         )
     )
     applications = list(app_result.scalars().all())
 
     company_name = recruiter_profile.company_name or "the recruiting company"
 
-    # Fire background tasks for candidate notifications (non-blocking)
-    for app in applications:
-        asyncio.create_task(
-            _notify_candidate_shortlisted(
-                application_id=app.id,
-                job_id=job_id,
-                job_title=job.title,
-                company_name=company_name,
-            )
-        )
+    # Candidate notifications are created in this request.
 
     # Create in-app confirmation notification for the recruiter (synchronous — lightweight)
     from src.services.notification_service import create_notification
     from src.models.notification_model import NotificationType
 
-    notified_count = len(applications)
+    notified_count = 0
+    for app in applications:
+        candidate = getattr(app, "candidate", None)
+        user = getattr(candidate, "user", None) if candidate else None
+        if not user:
+            continue
+
+        candidate_name = candidate.full_name or user.email
+        await create_notification(
+            db=db,
+            user_id=user.id,
+            type=NotificationType.SHORTLIST_RESULT,
+            title=f"You've been shortlisted for {job.title}!",
+            message=(
+                f"Congratulations! {company_name} has included you in their final shortlist "
+                f"for the position of '{job.title}'. The recruiter will be in touch soon."
+            ),
+            job_id=job_id,
+        )
+        notified_count += 1
+
+        if user.email:
+            asyncio.create_task(
+                send_shortlist_notification(
+                    candidate_email=user.email,
+                    candidate_name=candidate_name,
+                    job_title=job.title,
+                    company_name=company_name,
+                )
+            )
     await create_notification(
         db=db,
         user_id=current_user.id,

@@ -141,7 +141,11 @@ async def get_resume_by_id(
     if not candidate.candidate_profile:
         raise AppException(ErrorCode.FORBIDDEN, "Candidate profile not found")
 
-    resume = await resume_service.get_resume_by_id(db, resource_id, candidate.candidate_profile.id)
+    resume = await resume_service.get_resume_by_id_unscoped(db, resource_id)
+    if resume is None:
+        raise AppException(ErrorCode.RESOURCE_NOT_FOUND, "Resume not found")
+    if resume.candidate_id != candidate.candidate_profile.id:
+        raise AppException(ErrorCode.FORBIDDEN, "You are not allowed to access this resume")
     return resume
 
 

@@ -1,7 +1,7 @@
 import uuid
 from typing import List
 
-from fastapi import APIRouter, Depends, status, Response
+from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.config.db import get_db
@@ -70,14 +70,17 @@ async def edit_job(
 
 
 # ------------------- Private route - Delete job , ROLE REQUIRED: RECRUITER ---------------------------
-@job_router.delete("/{job_id}", status_code=status.HTTP_204_NO_CONTENT)
+@job_router.delete("/{job_id}", status_code=status.HTTP_200_OK)
 async def delete_job(
         job_id: uuid.UUID,
         db: AsyncSession = Depends(get_db),
         current_user: User = Depends(require_role(UserRole.RECRUITER)),
 ):
     await delete_job_service(db, job_id, current_user)
-    return Response(status_code=status.HTTP_204_NO_CONTENT)
+    return {
+        "success": True,
+        "message": "Job deleted successfully",
+    }
 
 
 # /api/jobs/recruiter/me
